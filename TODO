@@ -1,0 +1,5 @@
+Add download folder specification in config file
+Add category and page number specification in config file
+Add store mode that only stores image info (id, title, author, tags, url) in database (sqlite, or other sql/nosql serverless database)
+Decide whether to make the crawler runs freshly and periodically (i.e. using a crontab to update images) or make the crawler stays in background and runs periodically (specify fetch time interval in config)
+Decide whether to have a seperate program to serve public api or make the crawler itself to serve public api (might not have a good performance), or just no public api at all

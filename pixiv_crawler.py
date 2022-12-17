@@ -58,7 +58,8 @@ while next_qs:
         prefix = str(illust.id) + "_" + illust.user.name + "_"
         title = illust.title
         url = illust.image_urls.large
+        extension = "." + url.split(".")[-1]
         print("[%s] %s" % (title, url.replace("i.pximg.net", "i.pixiv.re")))
-        api.download(url, path="downloads", prefix=prefix,
-                     name=slugify(title, True)+".jpg")
+        api.download(url, path="downloads", prefix=slugify(prefix, True),
+                     name=slugify(title, True) + extension)
     next_qs = api.parse_qs(json_result.next_url)
