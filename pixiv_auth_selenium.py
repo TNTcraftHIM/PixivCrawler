@@ -25,11 +25,11 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 global_username = ""
 global_password = ""
 
-global_config = configparser.ConfigParser()
-global_config.read('config.ini')
-if (global_config.has_option("Auth", "username") and global_config.has_option("Auth", "password")):
-    global_username = global_config.get("Auth", "username")
-    global_password = global_config.get("Auth", "password")
+config = configparser.ConfigParser()
+config.read('config.ini')
+if (config.has_option("Auth", "pixiv_username") and config.has_option("Auth", "pixiv_password")):
+    global_username = config.get("Auth", "pixiv_username")
+    global_password = config.get("Auth", "pixiv_password")
 
 # Latest app version can be found using GET /v1/application-info/android
 USER_AGENT = "PixivIOSApp/7.13.3 (iOS 14.6; iPhone13,2)"
@@ -84,8 +84,7 @@ def print_auth_token_response(response):
     global_expires_in = expires_in
 
 
-def login():
-    global global_username, global_password
+def get_webdriver(headless=False):
     caps = DesiredCapabilities.CHROME.copy()
     caps["goog:loggingPrefs"] = {
         "performance": "ALL"}  # enable performance logs
@@ -93,12 +92,18 @@ def login():
     options.add_experimental_option(
         "excludeSwitches", ['enable-automation', 'enable-logging'])
     # if username and password are specified, run in headless mode
-    if (global_username != "" and global_password != ""):
+    if (headless):
         options.add_argument("--headless")
     service = ChromeService(ChromeDriverManager().install())
     driver = webdriver.Chrome(
         service=service, options=options, desired_capabilities=caps)
+    return driver
 
+
+def login(captcha=False):
+    global global_username, global_password
+    driver = get_webdriver(
+        (global_username != "" and global_password != "") and not captcha)
     code_verifier, code_challenge = oauth_pkce(s256)
     login_params = {
         "code_challenge": code_challenge,
@@ -111,8 +116,8 @@ def login():
 
     # logging in with username and password (if there is one in the config file, otherwise wait for user input)
     if (global_username == "" and global_password == ""):
-        global_username = input("username: ")
-        global_password = input("password: ")
+        global_username = input("pixiv_username: ")
+        global_password = input("pixiv_password: ")
     if (global_username != "" and global_password != ""):
         element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "degQSE")))
@@ -131,8 +136,14 @@ def login():
         element.click()
     else:
         print("no username and password specified, please login manually in the browser window")
+    if (captcha):
+        print("please reolve the captcha manually in the browser window")
     while True:
         # wait for login
+        if driver.find_elements(By.CLASS_NAME, 'dKhCxY') and captcha == False:
+            print("captcha detected, opening a new visible browser window")
+            driver.quit()
+            return login(captcha=True)
         if driver.current_url[:40] == "https://accounts.pixiv.net/post-redirect":
             break
         time.sleep(1)
@@ -159,7 +170,7 @@ def login():
             "client_secret": CLIENT_SECRET,
             "code": code,
             "code_verifier": code_verifier,
-            "grant_type": "auth_code",
+            "grant_type": "authorization_code",
             "include_policy": "true",
             "redirect_uri": REDIRECT_URI,
         },
@@ -195,15 +206,13 @@ def refresh(refresh_token):
 
 
 def get_refresh_token():
-    global global_refresh_token, global_expires_in, global_username, global_password
+    global config, global_refresh_token, global_expires_in, global_username, global_password
     refresh_token = ""
     token_expired = False
-    config = configparser.ConfigParser()
-    config.read('config.ini')
 
-    if (config.has_option("Auth", "refresh_token") and config["Auth"]["refresh_token"] != "" and config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")):
+    if (config.has_option("Auth", "refresh_token")):
         refresh_token = config["Auth"]["refresh_token"]
-        if ((time.time() - float(config["Auth"]["last_update_timestamp"])) >= float(config["Auth"]["expires_in"])):
+        if (not (config["Auth"]["refresh_token"] != "" and config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")) or ((time.time() - float(config["Auth"]["last_update_timestamp"])) >= float(config["Auth"]["expires_in"]))):
             token_expired = True
 
     if not token_expired and refresh_token != "":
@@ -226,8 +235,8 @@ def get_refresh_token():
     else:
         last_update_timestamp = float(
             config["Auth"]["last_update_timestamp"])
-    config["Auth"] = {"username": global_username, "password": global_password, "refresh_token": global_refresh_token,
-                              "expires_in": global_expires_in, "last_update_timestamp": last_update_timestamp}
+    config["Auth"] = {"pixiv_username": global_username, "pixiv_password": global_password, "refresh_token": global_refresh_token,
+                      "expires_in": str(global_expires_in), "last_update_timestamp": str(last_update_timestamp)}
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
     return global_refresh_token
