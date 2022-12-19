@@ -1,8 +1,9 @@
 import hashlib
+import time
 import os
 import re
 import unicodedata
-import configparser
+import configupdater
 
 from tinydb import TinyDB
 from tinydb.table import Document
@@ -39,130 +40,183 @@ def insertDB(db, pk, data):
         else:
             return False
     except Exception as e:
-        print(e)
+        # print(e)
         return False
 
 
-# read config file
-config = configparser.ConfigParser(
-    inline_comment_prefixes="#", allow_no_value=True)
-config.read('config.ini')
-if not config.has_section("Crawler"):
-    config.add_section("Crawler")
-# get store_mode to determine whether to store images as links or download them (default: light)
-if config.has_option("Crawler", "store_mode") and (config["Crawler"]["store_mode"] in ["light", "full"]):
-    store_mode = config["Crawler"]["store_mode"]
-else:
-    store_mode = "light"
-    print("store_mode invalid, using default: " + store_mode)
-config["Crawler"]["store_mode"] = store_mode + \
-    " # light(store image urls only), full(store images locally)"
-# get db_path to determine where to store the database (default: db.json)
-if config.has_option("Crawler", "db_path") and config["Crawler"]["db_path"] != "":
-    db_path = config["Crawler"]["db_path"]
-else:
-    db_path = "db.json"
-    print("db_path invalid, using default: " + db_path)
-config["Crawler"]["db_path"] = db_path
-# get download folder
-if config.has_option("Crawler", "download_folder") and config["Crawler"]["download_folder"] != "":
-    download_folder = config["Crawler"]["download_folder"]
-else:
-    download_folder = "downloads"
-    print("download_folder invalid, using default: " + download_folder)
-config["Crawler"]["download_folder"] = download_folder
-# check if download folder exists
-if not os.path.exists(download_folder):
-    os.makedirs(download_folder)
-# get ranking mode
-if config.has_option("Crawler", "ranking_mode") and (config["Crawler"]["ranking_mode"] in ["day", "week", "month", "day_male", "day_female", "week_original", "week_rookie", "day_r18", "day_male_r18", "day_female_r18", "week_r18", "week_r18g"]):
-    ranking_mode = config["Crawler"]["ranking_mode"]
-else:
-    ranking_mode = "day_male"
-    print("ranking_mode invalid, using default: " + ranking_mode)
-config["Crawler"]["ranking_mode"] = ranking_mode + \
-    " # day, week, month, day_male, day_female, week_original, week_rookie, day_r18, day_male_r18, day_female_r18, week_r18, week_r18g"
-# get get_all_ranking_pages flag (default: True)
-if config.has_option("Crawler", "get_all_ranking_pages"):
-    get_all_ranking_pages = bool(
-        config["Crawler"]["get_all_ranking_pages"].capitalize() == "True")
-else:
-    get_all_ranking_pages = True
-    print("get_all_ranking_pages invalid, using default: " +
-          str(get_all_ranking_pages))
-config["Crawler"]["get_all_ranking_pages"] = str(
-    get_all_ranking_pages) + " # True(get all ranking images), False(get only 1-30 images in ranking)"
-# get allow_multiple_pages flag (default: False)
-if config.has_option("Crawler", "allow_multiple_pages"):
-    allow_multiple_pages = bool(
-        config["Crawler"]["allow_multiple_pages"].capitalize() == "True")
-else:
-    allow_multiple_pages = False
-    print("allow_multiple_pages invalid, using default: " +
-          str(allow_multiple_pages))
-config["Crawler"]["allow_multiple_pages"] = str(allow_multiple_pages)
-# get get_all_multiple_pages flag (default: False, only get the first page)
-if config.has_option("Crawler", "get_all_multiple_pages"):
-    get_all_multiple_pages = bool(
-        config["Crawler"]["get_all_multiple_pages"].capitalize() == "True")
-else:
-    get_all_multiple_pages = False
-    print("get_all_multiple_pages invalid, using default: " +
-          str(get_all_multiple_pages))
-config["Crawler"]["get_all_multiple_pages"] = str(get_all_multiple_pages)
+def read_config():
+    global api, config, db_path, store_mode, download_folder, ranking_mode, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval
+    # read config file
+    config = configupdater.ConfigUpdater()
+    config.read('config.ini')
+    if not os.path.exists('config.ini'):
+        # Create config file
+        with open('config.ini', 'w'):
+            pass
+    if not config.has_section("Crawler"):
+        config.add_section("Crawler")
+    # get db_path to determine where to store the database (default: db.json)
+    if config.has_option("Crawler", "db_path") and config["Crawler"]["db_path"].value != "":
+        db_path = config["Crawler"]["db_path"].value
+    else:
+        db_path = "db.json"
+        print("db_path invalid, using default: " + db_path)
+    config.set("Crawler", "db_path", db_path)
+    # get store_mode to determine whether to store images as links or download them (default: light)
+    comment = ""
+    if config.has_option("Crawler", "store_mode") and (config["Crawler"]["store_mode"].value in ["light", "full"]):
+        store_mode = config["Crawler"]["store_mode"].value
+    else:
+        if not config.has_option("Crawler", "store_mode"):
+            comment = (
+                "light(store image urls only), full(store images locally)")
+        store_mode = "light"
+        print("store_mode invalid, using default: " + store_mode)
+    config.set("Crawler", "store_mode", store_mode)
+    if comment != "":
+        config["Crawler"]["store_mode"].add_before.comment(comment)
+    # get download folder
+    if config.has_option("Crawler", "download_folder") and config["Crawler"]["download_folder"].value != "":
+        download_folder = config["Crawler"]["download_folder"].value
+    else:
+        download_folder = "downloads"
+        print("download_folder invalid, using default: " + download_folder)
+    config.set("Crawler", "download_folder", download_folder)
+    # check if download folder exists
+    if not os.path.exists(download_folder):
+        os.makedirs(download_folder)
+    # get ranking mode
+    comment = ""
+    if config.has_option("Crawler", "ranking_mode") and (config["Crawler"]["ranking_mode"].value in ["day", "week", "month", "day_male", "day_female", "week_original", "week_rookie", "day_r18", "day_male_r18", "day_female_r18", "week_r18", "week_r18g"]):
+        ranking_mode = config["Crawler"]["ranking_mode"].value
+    else:
+        if (not config.has_option("Crawler", "ranking_mode")):
+            comment = (
+                "day, week, month, day_male, day_female, week_original, week_rookie, day_r18, day_male_r18, day_female_r18, week_r18, week_r18g")
+        ranking_mode = "day_male"
+        print("ranking_mode invalid, using default: " + ranking_mode)
+    config.set("Crawler", "ranking_mode", ranking_mode)
+    if comment != "":
+        config["Crawler"]["ranking_mode"].add_before.comment(comment)
+    # get get_all_ranking_pages flag (default: True)
+    if config.has_option("Crawler", "get_all_ranking_pages"):
+        get_all_ranking_pages = bool(
+            config["Crawler"]["get_all_ranking_pages"].value.capitalize() == "True")
+        comment = ""
+    else:
+        comment = (
+            "True(get all ranking images), False(get only 1-30 images in ranking)")
+        get_all_ranking_pages = True
+        print("get_all_ranking_pages invalid, using default: " +
+              str(get_all_ranking_pages))
+    config.set("Crawler", "get_all_ranking_pages", str(get_all_ranking_pages))
+    if comment != "":
+        config["Crawler"]["get_all_ranking_pages"].add_before.comment(comment)
+    # get allow_multiple_pages flag (default: False)
+    if config.has_option("Crawler", "allow_multiple_pages"):
+        allow_multiple_pages = bool(
+            config["Crawler"]["allow_multiple_pages"].value.capitalize() == "True")
+    else:
+        allow_multiple_pages = False
+        print("allow_multiple_pages invalid, using default: " +
+              str(allow_multiple_pages))
+    config.set("Crawler", "allow_multiple_pages", allow_multiple_pages)
+    # get get_all_multiple_pages flag (default: False, only get the first page)
+    if config.has_option("Crawler", "get_all_multiple_pages"):
+        get_all_multiple_pages = bool(
+            config["Crawler"]["get_all_multiple_pages"].value.capitalize() == "True")
+    else:
+        get_all_multiple_pages = False
+        print("get_all_multiple_pages invalid, using default: " +
+              str(get_all_multiple_pages))
+    config.set("Crawler", "get_all_multiple_pages", get_all_multiple_pages)
+    # get update_interval
+    comment = ""
+    if config.has_option("Crawler", "update_interval") and int(config["Crawler"]["update_interval"].value) > 0:
+        update_interval = int(config["Crawler"]["update_interval"].value)
+    else:
+        if (not config.has_option("Crawler", "update_interval")):
+            comment = (
+                "seconds between each crawl")
+        update_interval = 86400
+        print("update_interval invalid, using default: " + str(update_interval))
+    config.set("Crawler", "update_interval", str(update_interval))
+    if comment != "":
+        config["Crawler"]["update_interval"].add_before.comment(comment)
+    # save config file
+    with open('config.ini', 'w') as configfile:
+        config.write(configfile)
 
-# save config file
-with open('config.ini', 'w') as configfile:
-    config.write(configfile)
+    print("Crawler config loaded")
+    refreshtoken = get_refresh_token()
+    api.auth(refresh_token=refreshtoken)
+    print("Logged in as " + api.user_detail(api.user_id).user.name)
 
+
+# init api
+api = AppPixivAPI()
+
+# read config
+read_config()
+last_update_timestamp = -1
 
 # init database
 db = TinyDB(db_path, indent=4, separators=(',', ': '))
 # db = TinyDB(db_path)
-
-api = AppPixivAPI()
-refreshtoken = get_refresh_token()
-api.auth(refresh_token=refreshtoken)
 
 # json_result = api.illust_detail(103727904)
 # illust = json_result.illust
 # print(illust)
 # exit()
 
-# crawl images:
-next_qs = {"mode": ranking_mode}
-while next_qs:
-    json_result = api.illust_ranking(**next_qs)
-    for illust in json_result.illusts:
-        if (illust.type == "manga"):
-            continue
-        if (not allow_multiple_pages and illust.page_count > 1):
-            continue
-        urls = []
-        url = illust.meta_single_page.original_image_url
-        if (url == None):
-            for images in illust.meta_pages:
-                url = images.image_urls.original
-                urls.append(url)
-                if (not get_all_multiple_pages):
-                    break
-        else:
-            urls = [url]
-        print("[%s] %s" % (illust.user.name, illust.title))
-        for i in range(len(urls)):
-            url = urls[i]
-            pk = str(illust.id) + "_" + str(i)
-            local_filename = ""
-            if (store_mode == "full"):
-                extension = os.path.splitext(url)[1]
-                local_filename = slugify(
-                    f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
-                api.download(url, path=download_folder,
-                             name=local_filename)
-            data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
-                    "page_count": illust.page_count, "r18": illust.x_restrict, "tags": illust.tags, "url": url, "local_filename": local_filename}
-            # insert into database
-            insertDB(db, pk, data)
-    next_qs = api.parse_qs(json_result.next_url)
-    if (not get_all_ranking_pages):
-        break
+
+def crawl_images():
+    global last_update_timestamp, update_interval
+    if (time.time() - last_update_timestamp < update_interval):
+        print("Crawl interval not reached, skipping")
+        return
+
+    image_count = 0
+    db_count = 0
+    download_count = 0
+    # crawl images:
+    next_qs = {"mode": ranking_mode}
+    while next_qs:
+        json_result = api.illust_ranking(**next_qs)
+        for illust in json_result.illusts:
+            if (illust.type == "manga"):
+                continue
+            if (not allow_multiple_pages and illust.page_count > 1):
+                continue
+            urls = []
+            url = illust.meta_single_page.original_image_url
+            if (url == None):
+                for images in illust.meta_pages:
+                    url = images.image_urls.original
+                    urls.append(url)
+                    if (not get_all_multiple_pages):
+                        break
+            else:
+                urls = [url]
+            for i in range(len(urls)):
+                url = urls[i]
+                pk = str(illust.id) + "_" + str(i)
+                local_filename = ""
+                if (store_mode == "full"):
+                    extension = os.path.splitext(url)[1]
+                    local_filename = slugify(
+                        f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
+                    if(api.download(url, path=download_folder, name=local_filename)):
+                        download_count += 1
+                data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
+                        "page_count": illust.page_count, "r18": illust.x_restrict, "tags": illust.tags, "url": url, "local_filename": local_filename}
+                # insert into database
+                image_count += 1
+                if (insertDB(db, pk, data)):
+                    db_count += 1
+        next_qs = api.parse_qs(json_result.next_url)
+        if (not get_all_ranking_pages):
+            break
+    print(
+        f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
+    last_update_timestamp = time.time()
