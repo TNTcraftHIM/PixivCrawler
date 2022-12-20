@@ -46,7 +46,7 @@ def insertDB(db, pk, data):
 
 
 def read_config():
-    global api, config, db_path, store_mode, download_folder, ranking_mode, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status
+    global api, config, db_path, store_mode, download_folder, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
@@ -90,17 +90,18 @@ def read_config():
         os.makedirs(download_folder)
     # get ranking mode
     comment = ""
-    if config.has_option("Crawler", "ranking_mode") and (config["Crawler"]["ranking_mode"].value in ["day", "week", "month", "day_male", "day_female", "week_original", "week_rookie", "day_r18", "day_male_r18", "day_female_r18", "week_r18", "week_r18g"]):
-        ranking_mode = config["Crawler"]["ranking_mode"].value
+    if config.has_option("Crawler", "ranking_modes") and all(item in ["day", "week", "month", "day_male", "day_female", "week_original", "week_rookie", "day_r18", "day_male_r18", "day_female_r18", "week_r18", "week_r18g"] for item in [x.strip() for x in config["Crawler"]["ranking_modes"].value.split(",")]):
+        ranking_modes = config["Crawler"]["ranking_modes"].value
     else:
-        if (not config.has_option("Crawler", "ranking_mode")):
+        if (not config.has_option("Crawler", "ranking_modes")):
             comment = (
-                "day, week, month, day_male, day_female, week_original, week_rookie, day_r18, day_male_r18, day_female_r18, week_r18, week_r18g")
-        ranking_mode = "day_male"
-        logger.warning("ranking_mode invalid, using default: " + ranking_mode)
-    config.set("Crawler", "ranking_mode", ranking_mode)
+                "available modes (comma separated): day, week, month, day_male, day_female, week_original, week_rookie, day_r18, day_male_r18, day_female_r18, week_r18, week_r18g")
+        ranking_modes = "day_male, day_male_r18"
+        logger.warning(
+            "ranking_modes invalid, using default: " + str(ranking_modes))
+    config.set("Crawler", "ranking_modes", ranking_modes)
     if comment != "":
-        config["Crawler"]["ranking_mode"].add_before.comment(comment)
+        config["Crawler"]["ranking_modes"].add_before.comment(comment)
     # get get_all_ranking_pages flag (default: False)
     if config.has_option("Crawler", "get_all_ranking_pages"):
         get_all_ranking_pages = bool(
@@ -151,6 +152,7 @@ def read_config():
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
 
+    last_update_timestamp = -1
     logger.info("Crawler config loaded")
     refreshtoken = get_refresh_token()
     api.auth(refresh_token=refreshtoken)
@@ -172,8 +174,8 @@ read_config()
 last_update_timestamp = -1
 
 # init database
-db = TinyDB(db_path, indent=4, separators=(',', ': '))
-# db = TinyDB(db_path)
+db = TinyDB(db_path, indent=4, separators=(',', ': '), ensure_ascii = False)
+# db = TinyDB(db_path, ensure_ascii = False)
 
 # json_result = api.illust_detail(103727904)
 # illust = json_result.illust
@@ -191,50 +193,51 @@ def crawl_images():
         logger.info("Crawler is " + crawler_status + ", skip crawl")
         return
     crawler_status = "crawling"
-    logger.info("Crawling images with config: store_mode=" + store_mode + ", ranking_mode=" + ranking_mode + ", get_all_ranking_pages=" + str(get_all_ranking_pages) +
+    logger.info("Crawling images with config: store_mode=" + store_mode + ", ranking_modes=" + ranking_modes + ", get_all_ranking_pages=" + str(get_all_ranking_pages) +
                 ", allow_multiple_pages=" + str(allow_multiple_pages) + ", get_all_multiple_pages=" + str(get_all_multiple_pages))
     image_count = 0
     db_count = 0
     download_count = 0
     # crawl images:
-    next_qs = {"mode": ranking_mode}
-    while next_qs:
-        json_result = api.illust_ranking(**next_qs)
-        for illust in json_result.illusts:
-            if (illust.type == "manga"):
-                continue
-            if (not allow_multiple_pages and illust.page_count > 1):
-                continue
-            urls = []
-            url = illust.meta_single_page.original_image_url
-            if (url == None):
-                for images in illust.meta_pages:
-                    url = images.image_urls.original
-                    urls.append(url)
-                    if (not get_all_multiple_pages):
-                        break
-            else:
-                urls = [url]
-            for i in range(len(urls)):
-                url = urls[i]
-                pk = str(illust.id) + "_" + str(i)
-                local_filename = ""
-                if (store_mode == "full"):
-                    extension = os.path.splitext(url)[1]
-                    local_filename = slugify(
-                        f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
-                    if(api.download(url, path=download_folder, name=local_filename)):
-                        download_count += 1
-                    local_filename = download_folder + os.sep + local_filename
-                data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
-                        "page_count": illust.page_count, "r18": illust.x_restrict, "ai_type": illust.illust_ai_type, "tags": illust.tags, "url": url, "local_filename": local_filename}
-                # insert into database
-                image_count += 1
-                if (insertDB(db, pk, data)):
-                    db_count += 1
-        next_qs = api.parse_qs(json_result.next_url)
-        if (not get_all_ranking_pages):
-            break
+    for mode in ranking_modes.split(","):
+        next_qs = {"mode": str.strip(mode)}
+        while next_qs:
+            json_result = api.illust_ranking(**next_qs)
+            for illust in json_result.illusts:
+                if (illust.type == "manga"):
+                    continue
+                if (not allow_multiple_pages and illust.page_count > 1):
+                    continue
+                urls = []
+                url = illust.meta_single_page.original_image_url
+                if (url == None):
+                    for images in illust.meta_pages:
+                        url = images.image_urls.original
+                        urls.append(url)
+                        if (not get_all_multiple_pages):
+                            break
+                else:
+                    urls = [url]
+                for i in range(len(urls)):
+                    url = urls[i]
+                    pk = str(illust.id) + "_" + str(i)
+                    local_filename = ""
+                    if (store_mode == "full"):
+                        extension = os.path.splitext(url)[1]
+                        local_filename = slugify(
+                            f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
+                        if(api.download(url, path=download_folder, name=local_filename)):
+                            download_count += 1
+                        local_filename = download_folder + os.sep + local_filename
+                    data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
+                            "page_count": illust.page_count, "r18": illust.x_restrict, "ai_type": illust.illust_ai_type, "tags": illust.tags, "url": url, "local_filename": local_filename}
+                    # insert into database
+                    image_count += 1
+                    if (insertDB(db, pk, data)):
+                        db_count += 1
+            next_qs = api.parse_qs(json_result.next_url)
+            if (not get_all_ranking_pages):
+                break
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
     last_update_timestamp = time.time()
