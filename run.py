@@ -42,9 +42,10 @@ def log_filter(record):
 if __name__ == "__main__":
     global logger
     log_config = uvicorn.config.LOGGING_CONFIG
-    log_config["formatters"]["default"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
     log_config["formatters"]["access"]["fmt"] = "%(asctime)s %(levelprefix)s %(message)s"
+    log_config["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
     log_config["formatters"]["default"]["fmt"] = "%(asctime)s %(levelprefix)s %(message)s"
+    log_config["formatters"]["default"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
     logger = logging.getLogger("uvicorn")
     logger.addHandler(logging.StreamHandler())
     logger.handlers[0].setFormatter(logging.Formatter(

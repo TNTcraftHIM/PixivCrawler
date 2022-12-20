@@ -46,7 +46,8 @@ def insertDB(db, pk, data):
 
 
 def read_config():
-    global api, config, db_path, store_mode, download_folder, ranking_mode, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval
+    global api, config, db_path, store_mode, download_folder, ranking_mode, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status
+    crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
     config.read('config.ini')
@@ -100,7 +101,7 @@ def read_config():
     config.set("Crawler", "ranking_mode", ranking_mode)
     if comment != "":
         config["Crawler"]["ranking_mode"].add_before.comment(comment)
-    # get get_all_ranking_pages flag (default: True)
+    # get get_all_ranking_pages flag (default: False)
     if config.has_option("Crawler", "get_all_ranking_pages"):
         get_all_ranking_pages = bool(
             config["Crawler"]["get_all_ranking_pages"].value.capitalize() == "True")
@@ -108,7 +109,7 @@ def read_config():
     else:
         comment = (
             "True(get all ranking images), False(get only 1-30 images in ranking)")
-        get_all_ranking_pages = True
+        get_all_ranking_pages = False
         logger.warning("get_all_ranking_pages invalid, using default: " +
                        str(get_all_ranking_pages))
     config.set("Crawler", "get_all_ranking_pages", str(get_all_ranking_pages))
@@ -154,6 +155,7 @@ def read_config():
     refreshtoken = get_refresh_token()
     api.auth(refresh_token=refreshtoken)
     logger.info("Pixiv logged in as " + api.user_detail(api.user_id).user.name)
+    crawler_status = "idle"
 
 
 # init api
@@ -161,6 +163,9 @@ api = AppPixivAPI()
 
 # init logger
 logger = logging.getLogger("uvicorn")
+
+# crawler status
+crawler_status = "idle"
 
 # read config
 read_config()
@@ -177,11 +182,17 @@ db = TinyDB(db_path, indent=4, separators=(',', ': '))
 
 
 def crawl_images():
-    global last_update_timestamp, update_interval
+    global last_update_timestamp, update_interval, crawler_status
     if (time.time() - last_update_timestamp < update_interval):
-        logger.info("Crawl interval not reached, skip crawl")
+        logger.info("Crawl interval of " + str(update_interval) +
+                    " seconds not reached, skip crawl")
         return
-
+    if (crawler_status != "idle"):
+        logger.info("Crawler is " + crawler_status + ", skip crawl")
+        return
+    crawler_status = "crawling"
+    logger.info("Crawling images with config: store_mode=" + store_mode + ", ranking_mode=" + ranking_mode + ", get_all_ranking_pages=" + str(get_all_ranking_pages) +
+                ", allow_multiple_pages=" + str(allow_multiple_pages) + ", get_all_multiple_pages=" + str(get_all_multiple_pages))
     image_count = 0
     db_count = 0
     download_count = 0
@@ -214,8 +225,9 @@ def crawl_images():
                         f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
                     if(api.download(url, path=download_folder, name=local_filename)):
                         download_count += 1
+                    local_filename = download_folder + os.sep + local_filename
                 data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
-                        "page_count": illust.page_count, "r18": illust.x_restrict, "tags": illust.tags, "url": url, "local_filename": local_filename}
+                        "page_count": illust.page_count, "r18": illust.x_restrict, "ai_type": illust.illust_ai_type, "tags": illust.tags, "url": url, "local_filename": local_filename}
                 # insert into database
                 image_count += 1
                 if (insertDB(db, pk, data)):
@@ -226,3 +238,4 @@ def crawl_images():
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
     last_update_timestamp = time.time()
+    crawler_status = "idle"
