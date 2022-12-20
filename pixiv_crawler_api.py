@@ -1,12 +1,11 @@
 import os
-import time
+import logging
 import configupdater
 import pixiv_crawler
 
 from typing import Optional
 from fastapi import FastAPI, BackgroundTasks
 from tinydb import TinyDB, where
-
 
 def read_config():
     config = configupdater.ConfigUpdater()
@@ -20,11 +19,16 @@ def read_config():
         pixiv_crawler.crawl_images()
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
-    print("API config loaded")
+    logger.log(logging.INFO, "API config loaded")
 
 
-read_config()
 app = FastAPI()
+
+@app.on_event("startup")
+def startup_event():
+    global logger
+    logger = logging.getLogger("uvicorn")
+    read_config()
 
 
 @app.get("/")

@@ -6,6 +6,7 @@
 [Done] Add store mode that only stores image info (id, title, author, tags, url) in database (sqlite, or other sql/nosql serverless database)
 [Done] Port ConfigParser to ConfigUpdater to avoid config file/comment corruption (need to add .value to all getters)
 [Done] (always in background and crawl periodically) Decide whether to make the crawler runs freshly and periodically (i.e. using a crontab to update images) or make the crawler stays in background and runs periodically (specify fetch time interval in config)
+[Done] Format all prints to use proper logging module
 
 Build API server that contains: config that could use local image cache/remote urls, reload config, specify reverse proxy of pixiv image; allowing users to randomize image according to given tags/r18/ai_type/author/id; allowing users to specify certain db id to lookup certain picture; having two serve modes that could either return json to user or directly return image file to user (might be unnecessary)
 Add ability to crawl from a specific date or a specific period of time in the past

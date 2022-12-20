@@ -4,6 +4,7 @@ import os
 import time
 import json
 import re
+import logging
 import requests
 import configupdater
 
@@ -21,6 +22,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+
+# init logger
+logger = logging.getLogger("uvicorn")
 
 # Get login credentials
 global_username = ""
@@ -81,14 +85,14 @@ def print_auth_token_response(response):
         access_token = data["access_token"]
         refresh_token = data["refresh_token"]
     except KeyError:
-        print("error:")
+        logger.critical("Error:")
         pprint(data)
         exit(1)
 
     expires_in = data.get("expires_in", 0)
-    print("access_token:", access_token)
-    print("refresh_token:", refresh_token)
-    print("expires_in:", expires_in)
+    logger.info("access_token: " + access_token)
+    logger.info("refresh_token: " + refresh_token)
+    logger.info("expires_in: " + str(expires_in))
     global_refresh_token = refresh_token
     global_expires_in = expires_in
 
@@ -118,14 +122,14 @@ def login(captcha=False):
         "code_challenge_method": "S256",
         "client": "pixiv-android",
     }
-    print("[INFO] Gen code_verifier:", code_verifier)
+    logger.info("Gen code_verifier: " + code_verifier)
 
     driver.get(f"{LOGIN_URL}?{urlencode(login_params)}")
 
     # logging in with username and password (if there is one in the config file, otherwise wait for user input)
     if (global_username == "" and global_password == ""):
-        global_username = input("pixiv_username: ")
-        global_password = input("pixiv_password: ")
+        global_username = input("Enter pixiv_username: ")
+        global_password = input("Enter pixiv_password: ")
     if (global_username != "" and global_password != ""):
         element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "degQSE")))
@@ -143,18 +147,24 @@ def login(captcha=False):
             EC.presence_of_element_located((By.CLASS_NAME, "fguACh")))
         element.click()
     else:
-        print("no username and password specified, please login manually in the browser window")
+        logger.warning(
+            "No username and password specified, please login manually in the browser window")
+    if captcha:
+        warning_needed = True
     while True:
         # wait for login
         if driver.current_url[:40] == "https://accounts.pixiv.net/post-redirect":
             break
-        if captcha == False and driver.find_elements(By.CLASS_NAME, 'dKhCxY'):
-            print("captcha detected, opening a new visible browser window")
-            driver.quit()
-            return login(captcha=True)
-        if captcha:
-            print("please reolve the captcha manually in the browser window")
-            captcha = False
+        if driver.find_elements(By.CLASS_NAME, 'dKhCxY'):
+            if not captcha:
+                logger.warning(
+                    "Captcha detected, opening a new visible browser window")
+                driver.quit()
+                return login(captcha=True)
+            if captcha and warning_needed:
+                logger.warning(
+                    "Please reolve the captcha manually in the browser window")
+                warning_needed = False
         time.sleep(1)
 
     # filter code url from performance logs
@@ -170,7 +180,7 @@ def login(captcha=False):
 
     driver.close()
 
-    print("[INFO] Get code:", code)
+    logger.info("Get code: " + code)
 
     response = requests.post(
         AUTH_TOKEN_URL,
@@ -232,7 +242,7 @@ def get_refresh_token():
     if not token_expired and refresh_token != "":
         global_refresh_token = refresh_token
         global_expires_in = config["Auth"]["expires_in"].value
-        print("token not expired")
+        logger.info("Token not expired")
     else:
         if refresh_token == "":
             login()

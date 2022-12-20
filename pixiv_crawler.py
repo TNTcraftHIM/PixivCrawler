@@ -1,5 +1,6 @@
 import hashlib
 import time
+import logging
 import os
 import re
 import unicodedata
@@ -40,7 +41,7 @@ def insertDB(db, pk, data):
         else:
             return False
     except Exception as e:
-        # print(e)
+        # logger.debug(e)
         return False
 
 
@@ -60,7 +61,7 @@ def read_config():
         db_path = config["Crawler"]["db_path"].value
     else:
         db_path = "db.json"
-        print("db_path invalid, using default: " + db_path)
+        logger.warning("db_path invalid, using default: " + db_path)
     config.set("Crawler", "db_path", db_path)
     # get store_mode to determine whether to store images as links or download them (default: light)
     comment = ""
@@ -71,7 +72,7 @@ def read_config():
             comment = (
                 "light(store image urls only), full(store images locally)")
         store_mode = "light"
-        print("store_mode invalid, using default: " + store_mode)
+        logger.warning("store_mode invalid, using default: " + store_mode)
     config.set("Crawler", "store_mode", store_mode)
     if comment != "":
         config["Crawler"]["store_mode"].add_before.comment(comment)
@@ -80,7 +81,8 @@ def read_config():
         download_folder = config["Crawler"]["download_folder"].value
     else:
         download_folder = "downloads"
-        print("download_folder invalid, using default: " + download_folder)
+        logger.warning(
+            "download_folder invalid, using default: " + download_folder)
     config.set("Crawler", "download_folder", download_folder)
     # check if download folder exists
     if not os.path.exists(download_folder):
@@ -94,7 +96,7 @@ def read_config():
             comment = (
                 "day, week, month, day_male, day_female, week_original, week_rookie, day_r18, day_male_r18, day_female_r18, week_r18, week_r18g")
         ranking_mode = "day_male"
-        print("ranking_mode invalid, using default: " + ranking_mode)
+        logger.warning("ranking_mode invalid, using default: " + ranking_mode)
     config.set("Crawler", "ranking_mode", ranking_mode)
     if comment != "":
         config["Crawler"]["ranking_mode"].add_before.comment(comment)
@@ -107,8 +109,8 @@ def read_config():
         comment = (
             "True(get all ranking images), False(get only 1-30 images in ranking)")
         get_all_ranking_pages = True
-        print("get_all_ranking_pages invalid, using default: " +
-              str(get_all_ranking_pages))
+        logger.warning("get_all_ranking_pages invalid, using default: " +
+                       str(get_all_ranking_pages))
     config.set("Crawler", "get_all_ranking_pages", str(get_all_ranking_pages))
     if comment != "":
         config["Crawler"]["get_all_ranking_pages"].add_before.comment(comment)
@@ -118,8 +120,8 @@ def read_config():
             config["Crawler"]["allow_multiple_pages"].value.capitalize() == "True")
     else:
         allow_multiple_pages = False
-        print("allow_multiple_pages invalid, using default: " +
-              str(allow_multiple_pages))
+        logger.warning("allow_multiple_pages invalid, using default: " +
+                       str(allow_multiple_pages))
     config.set("Crawler", "allow_multiple_pages", allow_multiple_pages)
     # get get_all_multiple_pages flag (default: False, only get the first page)
     if config.has_option("Crawler", "get_all_multiple_pages"):
@@ -127,8 +129,8 @@ def read_config():
             config["Crawler"]["get_all_multiple_pages"].value.capitalize() == "True")
     else:
         get_all_multiple_pages = False
-        print("get_all_multiple_pages invalid, using default: " +
-              str(get_all_multiple_pages))
+        logger.warning("get_all_multiple_pages invalid, using default: " +
+                       str(get_all_multiple_pages))
     config.set("Crawler", "get_all_multiple_pages", get_all_multiple_pages)
     # get update_interval
     comment = ""
@@ -139,7 +141,8 @@ def read_config():
             comment = (
                 "seconds between each crawl")
         update_interval = 86400
-        print("update_interval invalid, using default: " + str(update_interval))
+        logger.warning(
+            "update_interval invalid, using default: " + str(update_interval))
     config.set("Crawler", "update_interval", str(update_interval))
     if comment != "":
         config["Crawler"]["update_interval"].add_before.comment(comment)
@@ -147,14 +150,17 @@ def read_config():
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
 
-    print("Crawler config loaded")
+    logger.info("Crawler config loaded")
     refreshtoken = get_refresh_token()
     api.auth(refresh_token=refreshtoken)
-    print("Logged in as " + api.user_detail(api.user_id).user.name)
+    logger.info("Pixiv logged in as " + api.user_detail(api.user_id).user.name)
 
 
 # init api
 api = AppPixivAPI()
+
+# init logger
+logger = logging.getLogger("uvicorn")
 
 # read config
 read_config()
@@ -173,7 +179,7 @@ db = TinyDB(db_path, indent=4, separators=(',', ': '))
 def crawl_images():
     global last_update_timestamp, update_interval
     if (time.time() - last_update_timestamp < update_interval):
-        print("Crawl interval not reached, skipping")
+        logger.info("Crawl interval not reached, skip crawl")
         return
 
     image_count = 0
@@ -217,6 +223,6 @@ def crawl_images():
         next_qs = api.parse_qs(json_result.next_url)
         if (not get_all_ranking_pages):
             break
-    print(
+    logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
     last_update_timestamp = time.time()
