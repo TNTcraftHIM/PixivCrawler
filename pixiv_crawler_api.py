@@ -211,7 +211,9 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
         end_date = convert_date(end_date)
         if not end_date:
             return {"status": "error", "data": "invalid end date, should be YYYY-MM-DD"}
-        if start_date > end_date:
+        if start_date == None:
+            return {"status": "error", "data": "start date should be specified if end date is specified"}
+        if start_date != None and start_date > end_date:
             return {"status": "error", "data": "start date should be earlier than end date"}
     dates = [None]
     if start_date != None:
@@ -219,7 +221,8 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
             dates = get_dates(start_date, end_date)
         else:
             dates = get_dates(start_date)
-    background_tasks.add_task(pixiv_crawler.crawl_images, True, force_update, dates)
+    background_tasks.add_task(
+        pixiv_crawler.crawl_images, True, force_update, dates)
     return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}requested (will not crawl if another crawl task is running)"}
 
 

@@ -231,11 +231,6 @@ last_update_timestamp = -1
 db = TinyDB(db_path, indent=4, separators=(',', ': '), ensure_ascii=False)
 # db = TinyDB(db_path, ensure_ascii = False)
 
-# json_result = api.illust_detail(103727904)
-# illust = json_result.illust
-# print(illust)
-# exit()
-
 
 def crawl_images(manual=False, force_update=False, dates=[None]):
     global last_update_timestamp, update_interval, crawler_status
@@ -251,7 +246,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
         return
     crawler_status = "crawling"
     logger.info(
-        f"Crawler started with config: store_mode={store_mode}, download_folder={download_folder}, download_reverse_proxy={download_reverse_proxy}, ranking_modes={get_list(ranking_modes)}, excluding_tags={get_list(excluding_tags)}, {'get_all_ranking_pages, ' if get_all_ranking_pages else ''}{'allow_multiple_pages, ' if allow_multiple_pages else ''}{'get_all_multiple_pages, ' if get_all_multiple_pages else ''}{'update_interval=' + str(update_interval) if not manual else 'running manually to crawl from date {} to {} '.format(dates[0], dates[-1])}")
+        f"Crawler started with config: store_mode={store_mode}, download_folder={download_folder}, download_quality={download_quality}, download_reverse_proxy={download_reverse_proxy}, ranking_modes={get_list(ranking_modes)}, excluding_tags={get_list(excluding_tags)}, {'get_all_ranking_pages, ' if get_all_ranking_pages else ''}{'allow_multiple_pages, ' if allow_multiple_pages else ''}{'get_all_multiple_pages, ' if get_all_multiple_pages else ''}{'update_interval=' + str(update_interval) if not manual else 'running manually {}{}'.format('and forcing updates ' if force_update else '' , 'to crawl from date {} to {}'.format(dates[0],dates[-1]) if dates[0] != None else '')}")
     image_count = 0
     db_count = 0
     download_count = 0
