@@ -17,6 +17,7 @@
 [Done] Add ability to exclude certain tags (e.g. exclude Gay/boy/BL/muscle/furry/futa tags) when crawling images
 [Done] Add ability to crawl from a specific date or a specific period of time in the past
 [Done] Add force_update option in config file to force update/insert crawled images in database
+[Done] Add image quality specification in config file (original, large, medium)
+[Done] Fix crawling 0 images bug
 
 Add param explanation in README
-Add image quality specification in config file (original, large, medium)

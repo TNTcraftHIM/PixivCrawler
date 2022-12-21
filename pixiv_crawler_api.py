@@ -213,7 +213,7 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
             return {"status": "error", "data": "invalid end date, should be YYYY-MM-DD"}
         if start_date > end_date:
             return {"status": "error", "data": "start date should be earlier than end date"}
-    dates = [datetime.date.today().strftime('%Y-%m-%d')]
+    dates = [None]
     if start_date != None:
         if end_date != None:
             dates = get_dates(start_date, end_date)

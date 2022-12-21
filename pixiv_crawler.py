@@ -57,7 +57,7 @@ def get_list(string: str):
 
 
 def read_config():
-    global api, config, db_path, store_mode, download_folder, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags
+    global api, config, db_path, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
@@ -83,7 +83,7 @@ def read_config():
     else:
         if not config.has_option("Crawler", "store_mode"):
             comment = (
-                "light(store image urls only), full(store images locally)")
+                "light(store image urls only, functions under /api/v1/img will not work), full(store images locally)")
         store_mode = "full"
         logger.warning("store_mode invalid, using default: " + store_mode)
     config.set("Crawler", "store_mode", store_mode)
@@ -100,6 +100,20 @@ def read_config():
     # check if download folder exists
     if not os.path.exists(download_folder) and store_mode == "full":
         os.makedirs(download_folder)
+    # get download quality
+    comment = ""
+    if config.has_option("Crawler", "download_quality") and (config["Crawler"]["download_quality"].value in ["original", "large", "medium"]):
+        download_quality = config["Crawler"]["download_quality"].value
+    else:
+        if not config.has_option("Crawler", "download_quality"):
+            comment = (
+                "available qualities: original(extremely space-consuming), large(balanced), medium(low resolution)")
+        download_quality = "large"
+        logger.warning(
+            "download_quality invalid, using default: " + download_quality)
+    config.set("Crawler", "download_quality", download_quality)
+    if comment != "":
+        config["Crawler"]["download_quality"].add_before.comment(comment)
     # get download reverse proxy (default: i.pixiv.re)
     comment = ""
     if config.has_option("Crawler", "download_reverse_proxy"):
@@ -223,7 +237,7 @@ db = TinyDB(db_path, indent=4, separators=(',', ': '), ensure_ascii=False)
 # exit()
 
 
-def crawl_images(manual=False, force_update=False, dates=[datetime.date.today().strftime('%Y-%m-%d')]):
+def crawl_images(manual=False, force_update=False, dates=[None]):
     global last_update_timestamp, update_interval, crawler_status
     if (not manual and update_interval == 0):
         logger.info("Background crawl disabled, skip crawl")
@@ -246,7 +260,10 @@ def crawl_images(manual=False, force_update=False, dates=[datetime.date.today().
     # crawl images:
     for date in dates:
         for mode in get_list(ranking_modes):
-            next_qs = {"mode": mode, "date": date}
+            if date == None:
+                next_qs = {"mode": mode}
+            else:
+                next_qs = {"mode": mode, "date": date}
             while next_qs:
                 json_result = api.illust_ranking(**next_qs)
                 for illust in json_result.illusts:
@@ -259,10 +276,22 @@ def crawl_images(manual=False, force_update=False, dates=[datetime.date.today().
                         if ((tag.name is not None and tag.name.lower() in excluding_tags_list) or (tag.translated_name is not None and tag.translated_name.lower() in excluding_tags_list)):
                             continue
                     urls = []
-                    url = illust.meta_single_page.original_image_url
+                    url = None
+                    if illust.page_count == 1:
+                        if (download_quality == "original"):
+                            url = illust.meta_single_page.original_image_url
+                        elif (download_quality == "large"):
+                            url = illust.image_urls.large
+                        else:
+                            url = illust.image_urls.medium
                     if (url == None):
                         for images in illust.meta_pages:
-                            url = images.image_urls.original
+                            if (download_quality == "original"):
+                                url = images.image_urls.original
+                            elif (download_quality == "large"):
+                                url = images.image_urls.large
+                            else:
+                                url = images.image_urls.medium
                             urls.append(url)
                             if (not get_all_multiple_pages):
                                 break
