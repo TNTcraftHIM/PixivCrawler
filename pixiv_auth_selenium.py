@@ -41,6 +41,8 @@ if (not config.has_section("Auth")):
 if (config.has_option("Auth", "pixiv_username") and config.has_option("Auth", "pixiv_password")):
     global_username = config["Auth"]["pixiv_username"].value
     global_password = config["Auth"]["pixiv_password"].value
+if (not config.has_option("Auth", "refresh_token")):
+    config.set("Auth", "refresh_token", "")
 with open('config.ini', 'w') as configfile:
     config.write(configfile)
 
@@ -104,6 +106,10 @@ def get_webdriver(headless=False):
     options = webdriver.ChromeOptions()
     options.add_experimental_option(
         "excludeSwitches", ['enable-automation', 'enable-logging'])
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('blink-settings=imagesEnabled=false')
     # if username and password are specified, run in headless mode
     if (headless):
         options.add_argument("--headless")
@@ -232,6 +238,7 @@ def get_refresh_token():
     config = configupdater.ConfigUpdater()
     config.read("config.ini")
     if (not config.has_section("Auth")):
+        config.append("\n")
         config.add_section("Auth")
 
     if (config.has_option("Auth", "refresh_token")):
@@ -254,8 +261,7 @@ def get_refresh_token():
 
     last_update_timestamp = -1
     if token_expired or refresh_token == "":
-        if (global_username != "" and global_password != ""):
-            last_update_timestamp = time.time()
+        last_update_timestamp = time.time()
     else:
         last_update_timestamp = float(
             config["Auth"]["last_update_timestamp"].value)

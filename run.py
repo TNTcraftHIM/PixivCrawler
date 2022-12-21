@@ -1,7 +1,13 @@
 import os
-import logging
+import sys
 import uvicorn
+import logging
 import configupdater
+
+from uvicorn import Config, Server
+from loguru import logger
+
+LOG_LEVEL = logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO"))
 
 
 def read_config():
@@ -14,6 +20,7 @@ def read_config():
             pass
     config.read('config.ini')
     if not config.has_section("PixivCrawler"):
+        config.append("\n")
         config.add_section("PixivCrawler")
     if config.has_option("PixivCrawler", "host"):
         host = config["PixivCrawler"]["host"].value
@@ -34,25 +41,59 @@ def read_config():
     logger.info("PixivCrawler config loaded")
 
 
-def log_filter(record):
-    record.levelprefix = record.levelname + ":"
-    return True
+class InterceptHandler(logging.Handler):
+    def emit(self, record):
+        # Get corresponding Loguru level if it exists
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the logged message
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage())
+
+
+def setup_logging():
+    # intercept everything at the root logger
+    logging.root.handlers = [InterceptHandler()]
+    logging.root.setLevel(LOG_LEVEL)
+
+    # remove every other logger's handlers
+    # and propagate to root logger
+    for name in logging.root.manager.loggerDict.keys():
+        logging.getLogger(name).handlers = []
+        logging.getLogger(name).propagate = True
+
+    # configure loguru
+    logger.configure(handlers=[{"sink": sys.stdout,
+                     "format": "<green>{time:YYYY-MM-dd HH:mm:ss}</> | <yellow>{level: <8}</> | {message}", "colorize": True}])
 
 
 if __name__ == "__main__":
-    global logger
     log_config = uvicorn.config.LOGGING_CONFIG
-    log_config["formatters"]["access"]["fmt"] = "%(asctime)s %(levelprefix)s %(message)s"
+    log_config["formatters"]["access"][
+        "fmt"] = "\x1b[0;32m%(asctime)s\u001b[0m | \u001b[33m%(levelname)-8s\u001b[0m | %(message)s"
     log_config["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
-    log_config["formatters"]["default"]["fmt"] = "%(asctime)s %(levelprefix)s %(message)s"
+    log_config["formatters"]["default"][
+        "fmt"] = "\x1b[0;32m%(asctime)s\u001b[0m | \u001b[33m%(levelname)-8s\u001b[0m | %(message)s"
     log_config["formatters"]["default"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
-    logger = logging.getLogger("uvicorn")
-    logger.addHandler(logging.StreamHandler())
-    logger.handlers[0].setFormatter(logging.Formatter(
-        "%(asctime)s %(levelprefix)-9s %(message)s", "%Y-%m-%d %H:%M:%S"))
-    logger.addFilter(log_filter)
-    logger.setLevel(logging.INFO)
-    print("-----Starting PixivCrawler API-----")
+    setup_logging()
+    print("---Starting PixivCrawler API---")
     read_config()
-    uvicorn.run("pixiv_crawler_api:app", host=host,
-                port=port, reload=True, log_config=log_config)
+    server = Server(
+        Config(
+            "pixiv_crawler_api:app",
+            host=host,
+            port=port,
+            log_level=3,
+            log_config=log_config,
+        ),
+    )
+    setup_logging()
+    server.run()

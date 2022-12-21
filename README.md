@@ -3,6 +3,8 @@ Crawler for Pixiv.net, has auto-generated docs, fast API response, and highly co
 # Instruction
 This project was developed under Python 3.10.4, yet no other Python version was tested
 
+Make sure you have a relatively recent version of Chrome browser installed, you may use `wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && sudo apt install ./google-chrome-stable_current_amd64.deb` to install it on Ubuntu/Debian running on x64 architecture, for other systems please refer to [Google's help center](https://support.google.com/chrome/a/topic/9025817)
+
 Use `pip install -r requirements.txt` to install all required libraries
 
 Use `python run.py` to run the script

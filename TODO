@@ -10,5 +10,13 @@
 [Done] Build API server that contains: config that could use local image cache/remote urls, reload config, specify reverse proxy of pixiv image; allowing users to randomize image according to given tags/r18/ai_type/author/id; allowing users to specify certain db id to lookup certain picture; having two serve modes that could either return json to user or directly return image file to user (might be unnecessary)
 [Done] Add limit to the number of images/tags/authors to crawl/return
 [Done] Add ability to crawl from more than one ranking mode
+[Done] Fix linux cannot find chrome binary issue
+[Done] Fix the last_update_time in auth is always -1 bug
+[Done] Add download_reverse_proxy in config file to specify reverse proxy for downloading images
+[Done] Fix log of default stream output cannot be seen on supervisor (access stream is visible)
+[Done] Add ability to exclude certain tags (e.g. exclude Gay/boy/BL/muscle/furry/futa tags) when crawling images
+[Done] Add ability to crawl from a specific date or a specific period of time in the past
+[Done] Add force_update option in config file to force update/insert crawled images in database
 
-Add ability to crawl from a specific date or a specific period of time in the past
+Add param explanation in README
+Add image quality specification in config file (original, large, medium)

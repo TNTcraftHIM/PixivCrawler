@@ -2,6 +2,7 @@ import os
 import re
 import random
 import logging
+import datetime
 import configupdater
 import pixiv_crawler
 
@@ -9,10 +10,11 @@ from typing import Optional, List
 from fastapi import FastAPI, BackgroundTasks, Query as QueryParam
 from fastapi.responses import FileResponse
 from tinydb import TinyDB, where, Query
+from tinydb.storages import JSONStorage
 
 
 def read_config():
-    global reverse_proxy, image_num_limit, author_num_limit, tag_num_limit
+    global privilege_api_key, reverse_proxy, image_num_limit, author_num_limit, tag_num_limit
     config = configupdater.ConfigUpdater()
     if not os.path.exists('config.ini'):
         # Create config file
@@ -20,9 +22,24 @@ def read_config():
             pass
     config.read('config.ini')
     if not config.has_section("API"):
+        config.append("\n")
         config.add_section("API")
         logger.info("First run, crawling before starting")
         pixiv_crawler.crawl_images()
+    # privilege API key
+    comment = ""
+    if config.has_option("API", "privilege_api_key") and config["API"]["privilege_api_key"].value != "":
+        privilege_api_key = config["API"]["privilege_api_key"].value
+    else:
+        if not config.has_option("API", "privilege_api_key"):
+            comment = "API key for privileged API calls (e.g. reload config/crawl images from past dates)"
+        privilege_api_key = "".join(
+            random.choice("0123456789abcdef") for i in range(32))
+        logger.warning(
+            "privilege_api_key invalid, using default: " + privilege_api_key)
+    config.set("API", "privilege_api_key", privilege_api_key)
+    if comment != "":
+        config["API"]["privilege_api_key"].add_before.comment(comment)
     # reverse proxy config
     comment = ""
     if config.has_option("API", "reverse_proxy"):
@@ -123,6 +140,23 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     return results
 
 
+def convert_date(date_text):
+    try:
+        date = datetime.datetime.strptime(date_text, '%Y-%m-%d')
+        # keep only date part and return
+        return date.date()
+    except ValueError:
+        return False
+
+
+def get_dates(start_date: datetime.date, end_date: datetime.date = datetime.date.today()):
+    dates = []
+    while start_date <= end_date:
+        dates.append(start_date.strftime('%Y-%m-%d'))
+        start_date += datetime.timedelta(days=1)
+    return dates
+
+
 app = FastAPI()
 
 
@@ -136,7 +170,7 @@ async def startup_event():
 
 @app.get("/")
 def read_root():
-    return {"Hello": "World"}
+    return {"PixivCrawler": "GitHub@TNTcraftHIM"}
 
 
 @app.get("/api/v1")
@@ -164,8 +198,36 @@ def get_image(background_tasks: BackgroundTasks, r18: Optional[int] = 2, id: Opt
     return FileResponse(results[0]["local_filename"])
 
 
+@app.get("/api/v1/crawl")
+# manually crawl images (need correct api key to work)
+def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optional[bool] = False, start_date: Optional[str] = None, end_date: Optional[str] = None):
+    if api_key != privilege_api_key:
+        return {"status": "error", "data": "invalid api key"}
+    if start_date != None:
+        start_date = convert_date(start_date)
+        if not start_date:
+            return {"status": "error", "data": "invalid start date, should be YYYY-MM-DD"}
+    if end_date != None:
+        end_date = convert_date(end_date)
+        if not end_date:
+            return {"status": "error", "data": "invalid end date, should be YYYY-MM-DD"}
+        if start_date > end_date:
+            return {"status": "error", "data": "start date should be earlier than end date"}
+    dates = [datetime.date.today().strftime('%Y-%m-%d')]
+    if start_date != None:
+        if end_date != None:
+            dates = get_dates(start_date, end_date)
+        else:
+            dates = get_dates(start_date)
+    background_tasks.add_task(pixiv_crawler.crawl_images, True, force_update, dates)
+    return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}requested (will not crawl if another crawl task is running)"}
+
+
 @app.get("/api/v1/reload")
-def reload():
+# need correct api key to work
+def reload(api_key: str):
+    if api_key != privilege_api_key:
+        return {"status": "error", "data": "invalid api key"}
     read_config()
     pixiv_crawler.read_config()
     return {"status": "success"}
