@@ -20,3 +20,4 @@
 [Done] Add image quality specification in config file (original, large, medium)
 [Done] Fix crawling 0 images bug
 [Done] Add param explanation in docs
+[Done] Add ability to return 302 redirect to image url in light mode or use param to specify whether to return 302 redirect or image file

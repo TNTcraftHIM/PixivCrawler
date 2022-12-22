@@ -1,7 +1,7 @@
 import hashlib
 import time
 import logging
-import datetime
+import traceback
 import os
 import re
 import unicodedata
@@ -217,8 +217,13 @@ def auth_api(log_info=False):
     refreshtoken = get_refresh_token()
     api.auth(refresh_token=refreshtoken)
     if log_info:
-        logger.info("Pixiv logged in as " +
-                    api.user_detail(api.user_id).user.name)
+        user_detail = api.user_detail(api.user_id)
+        try:
+            logger.info("Pixiv logged in as " + user_detail.user.name)
+        except Exception as e:
+            traceback.print_exc()
+            logger.critical("Pixiv login failed due to error: " + str(e))
+            exit()
 
 
 # init api
@@ -325,6 +330,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                     if (not get_all_ranking_pages):
                         break
     except Exception as e:
+        traceback.print_exc()
         logger.error("Stopping crawler due to error: " + str(e))
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
