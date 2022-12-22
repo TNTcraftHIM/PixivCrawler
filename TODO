@@ -21,3 +21,7 @@
 [Done] Fix crawling 0 images bug
 [Done] Add param explanation in docs
 [Done] Add ability to return 302 redirect to image url in light mode or use param to specify whether to return 302 redirect or image file
+[Done] Remove local_filename field from /api/v1 response
+[Done] Add HTML return that includes image url and file name as page title
+[Done] Fix that some images cannot be added into database
+[Done] Add config to minify database file

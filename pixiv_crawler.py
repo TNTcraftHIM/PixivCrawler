@@ -57,7 +57,7 @@ def get_list(string: str):
 
 
 def read_config():
-    global api, config, db_path, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags
+    global api, config, db_path, db_minify, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
@@ -76,6 +76,18 @@ def read_config():
         db_path = "db.json"
         logger.warning("db_path invalid, using default: " + db_path)
     config.set("Crawler", "db_path", db_path)
+    # get db_minify to determine whether to minify the database (default: True)
+    comment = ""
+    if config.has_option("Crawler", "db_minify") and (config["Crawler"]["db_minify"].value in ["True", "False"]):
+        db_minify = bool(config["Crawler"]["db_minify"].value == "True")
+    else:
+        if not config.has_option("Crawler", "db_minify"):
+            comment = "True(reduce size of database file), False(beautify database so it's easier to read)"
+        db_minify = True
+        logger.warning("db_minify invalid, using default: " + str(db_minify))
+    config.set("Crawler", "db_minify", str(db_minify))
+    if comment != "":
+        config["Crawler"]["db_minify"].add_before.comment(comment)
     # get store_mode to determine whether to store images as links or download them (default: light)
     comment = ""
     if config.has_option("Crawler", "store_mode") and (config["Crawler"]["store_mode"].value in ["light", "full"]):
@@ -214,7 +226,7 @@ def read_config():
 
 def auth_api(log_info=False):
     global api
-    refreshtoken = get_refresh_token()
+    refreshtoken = get_refresh_token(log_info=log_info)
     api.auth(refresh_token=refreshtoken)
     if log_info:
         user_detail = api.user_detail(api.user_id)
@@ -240,8 +252,11 @@ read_config()
 last_update_timestamp = -1
 
 # init database
-db = TinyDB(db_path, indent=4, separators=(',', ': '), ensure_ascii=False)
-# db = TinyDB(db_path, ensure_ascii = False)
+if db_minify:
+    db = TinyDB(db_path, ensure_ascii=False, encoding='utf-8')
+else:
+    db = TinyDB(db_path, indent=4, separators=(',', ': '),
+                ensure_ascii=False, encoding='utf-8')
 
 
 def crawl_images(manual=False, force_update=False, dates=[None]):

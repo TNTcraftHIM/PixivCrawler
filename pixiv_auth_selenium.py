@@ -79,7 +79,7 @@ def oauth_pkce(transform):
     return code_verifier, code_challenge
 
 
-def print_auth_token_response(response):
+def print_auth_token_response(response, log_info=False):
     global global_refresh_token, global_expires_in
     data = response.json()
 
@@ -92,9 +92,10 @@ def print_auth_token_response(response):
         exit(1)
 
     expires_in = data.get("expires_in", 0)
-    logger.info("access_token: " + access_token)
-    logger.info("refresh_token: " + refresh_token)
-    logger.info("expires_in: " + str(expires_in))
+    if (log_info):
+        logger.info("access_token: " + access_token)
+        logger.info("refresh_token: " + refresh_token)
+        logger.info("expires_in: " + str(expires_in))
     global_refresh_token = refresh_token
     global_expires_in = expires_in
 
@@ -119,7 +120,7 @@ def get_webdriver(headless=False):
     return driver
 
 
-def login(captcha=False):
+def login(captcha=False, log_info=False):
     global global_username, global_password
     driver = get_webdriver(not captcha)
     code_verifier, code_challenge = oauth_pkce(s256)
@@ -207,10 +208,10 @@ def login(captcha=False):
         **REQUESTS_KWARGS
     )
 
-    print_auth_token_response(response)
+    print_auth_token_response(response, log_info=log_info)
 
 
-def refresh(refresh_token):
+def refresh(refresh_token, log_info=False):
     response = requests.post(
         AUTH_TOKEN_URL,
         data={
@@ -227,10 +228,10 @@ def refresh(refresh_token):
         },
         **REQUESTS_KWARGS
     )
-    print_auth_token_response(response)
+    print_auth_token_response(response, log_info=log_info)
 
 
-def get_refresh_token():
+def get_refresh_token(log_info=False):
     global global_refresh_token, global_expires_in, global_username, global_password
     refresh_token = ""
     token_expired = False
@@ -249,12 +250,13 @@ def get_refresh_token():
     if not token_expired and refresh_token != "":
         global_refresh_token = refresh_token
         global_expires_in = config["Auth"]["expires_in"].value
-        logger.info("Token not expired")
+        if log_info:
+            logger.info("Token not expired")
     else:
         if refresh_token == "":
-            login()
+            login(log_info=log_info)
         else:
-            refresh(refresh_token)
+            refresh(refresh_token, log_info=log_info)
 
     while global_refresh_token == "":
         time.sleep(1)
