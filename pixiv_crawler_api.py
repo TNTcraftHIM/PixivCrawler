@@ -109,7 +109,7 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     if num > image_num_limit:
         num = image_num_limit
     if id != None:
-        q = q & where("id") == id
+        q = q & (where("id") == id)
     if author_ids != []:
         if len(author_ids) > author_num_limit:
             author_ids = (author_ids)[:author_num_limit]
@@ -122,7 +122,7 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     if title != "":
         q = q & where("title").search(title)
     if ai_type != None:
-        q = q & where("ai_type") == ai_type
+        q = q & (where("ai_type") == ai_type)
     if tags != []:
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
