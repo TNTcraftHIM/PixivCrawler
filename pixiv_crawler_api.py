@@ -168,13 +168,13 @@ async def startup_event():
     read_config()
 
 
-@app.get("/")
+@app.get("/", description="Get PixivCrawler API credit info")
 def read_root():
     return {"PixivCrawler": "GitHub@TNTcraftHIM"}
 
 
-@app.get("/api/v1")
-def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = 2, num: Optional[int] = 1, id: Optional[int] = None, author_ids: Optional[List[int]] = QueryParam(default=[]), author_names: Optional[List[str]] = QueryParam(default=[]), title: Optional[str] = "", ai_type: Optional[int] = None, tags: Optional[List[str]] = QueryParam(default=[])):
+@app.get("/api/v1", description="Get image JSON according to query")
+def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), num: Optional[int] = QueryParam(default=1, description="Specify number of illustrations"), id: Optional[int] = QueryParam(default=None, description="Specify illustration ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
     results = randomDB(r18=r18, num=num, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
@@ -187,9 +187,9 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = 2, nu
 # reload config for crawler and api
 
 
-@app.get("/api/v1/img")
+@app.get("/api/v1/img", response_class=FileResponse, description="Get image file according to query")
 # directly return image file
-def get_image(background_tasks: BackgroundTasks, r18: Optional[int] = 2, id: Optional[int] = None, author_ids: Optional[List[int]] = QueryParam(default=[]), author_names: Optional[List[str]] = QueryParam(default=[]), title: Optional[str] = "", ai_type: Optional[int] = None, tags: Optional[List[str]] = QueryParam(default=[])):
+def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustration ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
     results = randomDB(r18=r18, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
@@ -198,9 +198,9 @@ def get_image(background_tasks: BackgroundTasks, r18: Optional[int] = 2, id: Opt
     return FileResponse(results[0]["local_filename"])
 
 
-@app.get("/api/v1/crawl")
+@app.get("/api/v1/crawl", description="Manually add crawl task, could be used to crawl images from the past (need api_key to work)")
 # manually crawl images (need correct api key to work)
-def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optional[bool] = False, start_date: Optional[str] = None, end_date: Optional[str] = None):
+def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optional[bool] = QueryParam(default=False, description="Whether to update records in the database if it already exists"), start_date: Optional[str] = QueryParam(default=None, description="Start date for crawler to crawl from"), end_date: Optional[str] = QueryParam(default=None, description="End date for crawler to crawl from, could be empty if start date is specified (will crawl until today)")):
     if api_key != privilege_api_key:
         return {"status": "error", "data": "invalid api key"}
     if start_date != None:
@@ -226,7 +226,7 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
     return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}requested (will not crawl if another crawl task is running)"}
 
 
-@app.get("/api/v1/reload")
+@app.get("/api/v1/reload", description="Reload config for crawler and API (need api_key to work)")
 # need correct api key to work
 def reload(api_key: str):
     if api_key != privilege_api_key:

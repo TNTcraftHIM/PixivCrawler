@@ -19,5 +19,4 @@
 [Done] Add force_update option in config file to force update/insert crawled images in database
 [Done] Add image quality specification in config file (original, large, medium)
 [Done] Fix crawling 0 images bug
-
-Add param explanation in README
+[Done] Add param explanation in docs
