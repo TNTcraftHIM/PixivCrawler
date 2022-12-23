@@ -208,8 +208,8 @@ def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     if not results:
         return {"status": "error", "data": "no results"}
     url = results[0]["url"].replace("i.pximg.net", reverse_proxy)
-    html = "<html> <head> <title>{}</title> </head> <body style=\"margin: 0px; backdrop-filter: blur(5px); background-image: url('{}'); background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover;\"> <img style=\"display: block; margin-left: auto; margin-right: auto; height: 100%;\" src=\"{}\" /> </body> </html>".format(
-        "["+results[0]["author_name"]+"]" + results[0]["title"], url, url)
+    html = "<html style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; background-image: url('{}');\"> <head> <title>{}</title> </head> <body style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); -moz-backdrop-filter: blur(10px); -o-backdrop-filter: blur(10px); -ms-backdrop-filter: blur(10px);\"> <img style=\"display: block; margin-left: auto; margin-right: auto; height: 100%;\" src=\"{}\" /> </body> </html>".format(
+        url, "["+results[0]["author_name"]+"]" + results[0]["title"], url)
     return HTMLResponse(html)
 
 
