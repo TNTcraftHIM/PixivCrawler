@@ -171,8 +171,8 @@ async def startup_event():
     read_config()
 
 
-@app.get("/", description="Get PixivCrawler API credit info")
-def read_root():
+@app.get("/", description="Get PixivCrawler API credit info and crawler status")
+def read_info():
     return {"PixivCrawler": "GitHub@TNTcraftHIM", "status": "crawler is currently " + pixiv_crawler.get_crawler_status()}
 
 
