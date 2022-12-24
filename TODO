@@ -25,3 +25,4 @@
 [Done] Add HTML return that includes image url and file name as page title
 [Done] Fix that some images cannot be added into database
 [Done] Add config to minify database file
+[Done] Add crawler status when requesting crawl manually

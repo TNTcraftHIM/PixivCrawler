@@ -173,7 +173,7 @@ async def startup_event():
 
 @app.get("/", description="Get PixivCrawler API credit info")
 def read_root():
-    return {"PixivCrawler": "GitHub@TNTcraftHIM"}
+    return {"PixivCrawler": "GitHub@TNTcraftHIM", "status": "crawler is currently " + pixiv_crawler.get_crawler_status()}
 
 
 @app.get("/api/v1", description="Get image JSON according to query")
@@ -182,7 +182,7 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     results = randomDB(r18=r18, num=num, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
-        return {"status": "error", "data": "no results"}
+        return {"status": "error", "data": "no result"}
     for item in results:
         item["url"] = item["url"].replace("i.pximg.net", reverse_proxy)
         del item["local_filename"]
@@ -196,17 +196,17 @@ def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     results = randomDB(r18=r18, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
     if not results:
-        return {"status": "error", "data": "no results"}
+        return {"status": "error", "data": "no result"}
     return FileResponse(results[0]["local_filename"])
 
 
-@app.get("/api/v1/html", description="Get image as a HTML page according to query")
+@app.get("/api/v1/html", description="Get image in a HTML page according to query")
 def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
     results = randomDB(r18=r18, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
-        return {"status": "error", "data": "no results"}
+        return {"status": "error", "data": "no result"}
     url = results[0]["url"].replace("i.pximg.net", reverse_proxy)
     html = "<html style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; background-image: url('{}');\"> <head> <title>{}</title> </head> <body style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); -moz-backdrop-filter: blur(10px); -o-backdrop-filter: blur(10px); -ms-backdrop-filter: blur(10px);\"> <img style=\"display: block; margin-left: auto; margin-right: auto; height: 100%;\" src=\"{}\" /> </body> </html>".format(
         url, "["+results[0]["author_name"]+"]" + results[0]["title"], url)
@@ -219,7 +219,7 @@ def get_image_redirect(background_tasks: BackgroundTasks, r18: Optional[int] = Q
     results = randomDB(r18=r18, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
-        return {"status": "error", "data": "no results"}
+        return {"status": "error", "data": "no result"}
     return RedirectResponse(results[0]["url"].replace("i.pximg.net", reverse_proxy), status_code=302)
 
 
@@ -231,29 +231,31 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
     if start_date != None:
         start_date = convert_date(start_date)
         if not start_date:
-            return {"status": "error", "data": "invalid start date, should be YYYY-MM-DD"}
+            return {"status": "error", "data": "invalid start_date, should be YYYY-MM-DD"}
     if end_date != None:
         end_date = convert_date(end_date)
         if not end_date:
-            return {"status": "error", "data": "invalid end date, should be YYYY-MM-DD"}
+            return {"status": "error", "data": "invalid end_date, should be YYYY-MM-DD"}
         if start_date == None:
-            return {"status": "error", "data": "start date should be specified if end date is specified"}
+            return {"status": "error", "data": "start_date should be specified if end date is specified"}
         if start_date != None and start_date > end_date:
-            return {"status": "error", "data": "start date should be earlier than end date"}
+            return {"status": "error", "data": "start_date should be earlier than end date"}
     dates = [None]
     if start_date != None:
         if end_date != None:
             dates = get_dates(start_date, end_date)
         else:
             dates = get_dates(start_date)
+    crawler_status = pixiv_crawler.get_crawler_status()
+    if crawler_status != "idle":
+        return {"status": "error", "data": "crawler is currently " + crawler_status + ", please wait until it is done"}
     background_tasks.add_task(
         pixiv_crawler.crawl_images, True, force_update, dates)
-    return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}requested (will not crawl if another crawl task is running)"}
-
-# reload config for crawler and api
+    return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}added"}
 
 
 @app.get("/api/v1/reload", description="Reload config for crawler and API (need api_key to work)")
+# reload config for crawler and api
 # need correct api key to work
 def reload(api_key: str):
     if api_key != privilege_api_key:

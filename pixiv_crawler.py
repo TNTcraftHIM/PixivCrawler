@@ -238,6 +238,10 @@ def auth_api(log_info=False):
             exit()
 
 
+def get_crawler_status():
+    return crawler_status
+
+
 # init api
 api = AppPixivAPI()
 
@@ -249,7 +253,10 @@ crawler_status = "idle"
 
 # read config and auth api
 read_config()
+
+# init variables
 last_update_timestamp = -1
+dismiss_skip_message = False
 
 # init database
 if db_minify:
@@ -260,20 +267,29 @@ else:
 
 
 def crawl_images(manual=False, force_update=False, dates=[None]):
-    global last_update_timestamp, update_interval, crawler_status
+    global last_update_timestamp, update_interval, crawler_status, dismiss_skip_message
     if (not manual and update_interval == 0):
-        logger.info("Background crawl disabled, skip crawl")
+        if not dismiss_skip_message:
+            logger.info("Background crawl disabled, skipping crawl")
+            dismiss_skip_message = True
         return
     if (not manual and time.time() - last_update_timestamp < update_interval):
-        logger.info("Crawl interval of " + str(update_interval) +
-                    " seconds not reached, skip crawl")
+        if not dismiss_skip_message:
+            logger.info("Crawl interval of " + str(update_interval) +
+                        " seconds not reached, skipping crawl")
+            dismiss_skip_message = True
         return
     if (crawler_status != "idle"):
-        logger.info("Crawler is " + crawler_status + ", skip crawl")
+        if not dismiss_skip_message:
+            logger.info("Crawler is currently " +
+                        crawler_status + ", skipping crawl")
+            dismiss_skip_message = True
         return
-    crawler_status = "crawling"
+    crawler_status = 'crawling automatically since update_interval of ' + str(update_interval) + " has been reached" if not manual else 'crawling manually {}{}'.format(
+        'and forcing updates ' if force_update else '', 'to crawl from date {} to {}'.format(dates[0], dates[-1]) if dates[0] != None else '')
     logger.info(
-        f"Crawler started with config: store_mode={store_mode}, download_folder={download_folder}, download_quality={download_quality}, download_reverse_proxy={download_reverse_proxy}, ranking_modes={get_list(ranking_modes)}, excluding_tags={get_list(excluding_tags)}, {'get_all_ranking_pages, ' if get_all_ranking_pages else ''}{'allow_multiple_pages, ' if allow_multiple_pages else ''}{'get_all_multiple_pages, ' if get_all_multiple_pages else ''}{'update_interval=' + str(update_interval) if not manual else 'running manually {}{}'.format('and forcing updates ' if force_update else '' , 'to crawl from date {} to {}'.format(dates[0],dates[-1]) if dates[0] != None else '')}")
+        f"Crawler started with config: store_mode={store_mode}, download_folder={download_folder}, download_quality={download_quality}, download_reverse_proxy={download_reverse_proxy}, ranking_modes={get_list(ranking_modes)}, excluding_tags={get_list(excluding_tags)}, {'get_all_ranking_pages, ' if get_all_ranking_pages else ''}{'allow_multiple_pages, ' if allow_multiple_pages else ''}{'get_all_multiple_pages, ' if get_all_multiple_pages else ''}" + crawler_status)
+    dismiss_skip_message = False
     image_count = 0
     db_count = 0
     download_count = 0
@@ -344,10 +360,10 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                     next_qs = api.parse_qs(json_result.next_url)
                     if (not get_all_ranking_pages):
                         break
+        last_update_timestamp = time.time()
     except Exception as e:
         traceback.print_exc()
-        logger.error("Stopping crawler due to error: " + str(e))
+        logger.error("Aborting crawler task due to error: " + str(e))
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
-    last_update_timestamp = time.time()
     crawler_status = "idle"
