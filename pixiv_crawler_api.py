@@ -1,12 +1,12 @@
 import os
 import re
-import random
 import logging
 import datetime
 import configupdater
 import pixiv_crawler
 
 from typing import Optional, List
+from numpy.random import default_rng
 from fastapi import FastAPI, BackgroundTasks, Query as QueryParam
 from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
 from tinydb import TinyDB, where, Query
@@ -32,8 +32,9 @@ def read_config():
     else:
         if not config.has_option("API", "privilege_api_key"):
             comment = "API key for privileged API calls (e.g. reload config/crawl images from past dates)"
-        privilege_api_key = "".join(
-            random.choice("0123456789abcdef") for i in range(32))
+        # generate random key of length 32 using choice
+        privilege_api_key = ''.join(random.choice(list(
+            "0123456789abcdef"), 32))
         logger.warning(
             "privilege_api_key invalid, using default: " + privilege_api_key)
     config.set("API", "privilege_api_key", privilege_api_key)
@@ -131,11 +132,13 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     if local_file:
         q = q & where("local_filename").matches(r".+")
     if q == baseq:
-        results = [db.all()[random.randint(1, len(db) - 1)]]
+        results = db.all()
     else:
         results = db.search(q)
-        if len(results) >= num:
-            results = random.sample(results, num)
+    results_len = len(results)
+    if results_len < num:
+        num = results_len
+    results = list(random.choice(results, num, replace=False))
     return results
 
 
@@ -161,6 +164,7 @@ def get_days_ago_date(days_ago: int):
 
 
 app = FastAPI()
+random = default_rng()
 
 
 @app.on_event("startup")
