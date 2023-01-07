@@ -129,7 +129,7 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
         q = q & Query().tags.any(Query().translated_name.matches(r"(?=("+'|'.join(tags)+r"))",
-                                                                 flags=re.IGNORECASE) or Query().name.matches(r"(?=("+'|'.join(tags)+r"))", flags=re.IGNORECASE))
+                                                                 flags=re.IGNORECASE) | Query().name.matches(r"(?=("+'|'.join(tags)+r"))", flags=re.IGNORECASE))
     if local_file:
         q = q & where("local_filename").matches(r".+")
     if q == baseq:
