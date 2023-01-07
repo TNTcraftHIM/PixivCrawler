@@ -10,7 +10,7 @@ import configupdater
 from tinydb import TinyDB
 from tinydb.table import Document
 from pixivpy3 import *
-from pixiv_auth_selenium import get_refresh_token
+from pixiv_auth_selenium import get_refresh_token, get_token_expiration
 
 
 def slugify(value, allow_unicode=False):
@@ -48,7 +48,8 @@ def insertDB(pk, data, force_update=False):
         else:
             return False
     except Exception as e:
-        # logger.debug(e)
+        # logger.error("Aborting database insertion due to error: " +
+        #              str(e) + "\n" + traceback.format_exc())
         return False
 
 
@@ -297,10 +298,11 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
     excluding_tags_list = (tag.lower() for tag in get_list(excluding_tags))
     # crawl images:
     try:
-        auth_api(False)
         for i in range(len(dates)):
             crawler_status = 'crawling automatically since update_interval of ' + str(update_interval) + " has been reached" if not manual else 'crawling manually {}{}'.format(
                 'and forcing updates ' if force_update else '', 'to crawl from date {} to {} [%{} completed]'.format(dates[0], dates[-1], round(i/len(dates)*100, 2)) if dates[0] != None else '')
+            if get_token_expiration():
+                auth_api()
             for mode in get_list(ranking_modes):
                 if dates[i] == None:
                     next_qs = {"mode": mode}

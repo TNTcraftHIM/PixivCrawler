@@ -8,7 +8,7 @@ import pixiv_crawler
 from typing import Optional, List
 from numpy.random import default_rng
 from fastapi import FastAPI, BackgroundTasks, Query as QueryParam
-from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse, JSONResponse
 from tinydb import TinyDB, where, Query
 
 
@@ -23,6 +23,7 @@ def read_config():
     if not config.has_section("API"):
         config.append("\n")
         config.add_section("API")
+    if len(db) == 0:
         logger.info("First run, crawling before starting")
         pixiv_crawler.crawl_images()
     # privilege API key
@@ -190,7 +191,7 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     for item in results:
         item["url"] = item["url"].replace("i.pximg.net", reverse_proxy)
         del item["local_filename"]
-    return {"status": "success", "data": results}
+    return JSONResponse({"status": "success", "data": results}, headers={"Access-Control-Allow-Origin": "*", "Content-Type": "application/json; charset=utf-8"})
 
 
 @app.get("/api/v1/img", description="Get image file from local storage according to query (need store_mode to be \"full\" and have files downloaded in local storage)")
@@ -199,9 +200,9 @@ def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     background_tasks.add_task(pixiv_crawler.crawl_images)
     results = randomDB(r18=r18, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
-    if not results:
+    if not results or not results[0]["local_filename"] or not os.path.exists(results[0]["local_filename"]):
         return {"status": "error", "data": "no result"}
-    return FileResponse(results[0]["local_filename"])
+    return FileResponse(results[0]["local_filename"], headers={"Access-Control-Allow-Origin": "*"})
 
 
 @app.get("/api/v1/html", description="Get image in a HTML page according to query")
@@ -211,10 +212,11 @@ def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = Query
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
         return {"status": "error", "data": "no result"}
-    url = results[0]["url"].replace("i.pximg.net", reverse_proxy)
+    results = results[0]
+    url = results["url"].replace("i.pximg.net", reverse_proxy)
     html = "<html style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; background-image: url('{}');\"> <head> <title>{}</title> </head> <body style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); -moz-backdrop-filter: blur(10px); -o-backdrop-filter: blur(10px); -ms-backdrop-filter: blur(10px);\"> <img style=\"display: block; margin-left: auto; margin-right: auto; height: 100%;\" src=\"{}\" /> </body> </html>".format(
-        url, "["+results[0]["author_name"]+"]" + results[0]["title"], url)
-    return HTMLResponse(html)
+        url, "["+results["author_name"]+"]" + results["title"], url)
+    return HTMLResponse(html, headers={"Access-Control-Allow-Origin": "*"})
 
 
 @app.get("/api/v1/redirect", description="Get image and redirect to its URL according to query")
@@ -224,7 +226,7 @@ def get_image_redirect(background_tasks: BackgroundTasks, r18: Optional[int] = Q
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
         return {"status": "error", "data": "no result"}
-    return RedirectResponse(results[0]["url"].replace("i.pximg.net", reverse_proxy), status_code=302)
+    return RedirectResponse(results[0]["url"].replace("i.pximg.net", reverse_proxy), status_code=302, headers={"Access-Control-Allow-Origin": "*"})
 
 
 @app.get("/api/v1/crawl", description="Manually add crawl task, could be used to crawl images from the past (need api_key to work)")

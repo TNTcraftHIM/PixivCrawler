@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import os
 import time
 import json
@@ -275,6 +273,10 @@ def get_refresh_token(log_info=False):
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
     return global_refresh_token
+
+
+def get_token_expiration():
+    return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value))
 
 
 def main():
