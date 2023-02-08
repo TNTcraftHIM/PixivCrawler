@@ -7,7 +7,8 @@ import re
 import unicodedata
 import configupdater
 
-from tinydb import TinyDB
+from PIL import Image
+from tinydb import TinyDB, Query
 from tinydb.table import Document
 from pixivpy3 import *
 from pixiv_auth_selenium import get_refresh_token, get_token_expiration
@@ -58,7 +59,7 @@ def get_list(string: str):
 
 
 def read_config():
-    global api, config, db_path, db_minify, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags
+    global api, config, db_path, db_minify, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags, stop_compression_task
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
@@ -120,8 +121,8 @@ def read_config():
     else:
         if not config.has_option("Crawler", "download_quality"):
             comment = (
-                "available qualities: original(extremely space-consuming), large(balanced), medium(low resolution)")
-        download_quality = "large"
+                "available qualities: original(space-consuming), large(balanced), medium(low resolution)")
+        download_quality = "original"
         logger.warning(
             "download_quality invalid, using default: " + download_quality)
     config.set("Crawler", "download_quality", download_quality)
@@ -215,6 +216,9 @@ def read_config():
     config.set("Crawler", "update_interval", str(update_interval))
     if comment != "":
         config["Crawler"]["update_interval"].add_before.comment(comment)
+    # reset stop_compression_task flag (default: False)
+    stop_compression_task = False
+
     # save config file
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
@@ -241,6 +245,16 @@ def auth_api(log_info=False):
 
 def get_crawler_status():
     return crawler_status
+
+
+def compress_image(image_path, output_path, quality):
+    image = Image.open(image_path)
+    image = image.convert('RGB')
+    image.save(output_path, optimize=True, quality=quality)
+
+
+def get_extension(filename):
+    return os.path.splitext(filename)[1]
 
 
 # init api
@@ -300,7 +314,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
     try:
         for i in range(len(dates)):
             crawler_status = 'crawling automatically since update_interval of ' + str(update_interval) + " has been reached" if not manual else 'crawling manually {}{}'.format(
-                'and forcing updates ' if force_update else '', 'to crawl from date {} to {} [%{} completed]'.format(dates[0], dates[-1], round(i/len(dates)*100, 2)) if dates[0] != None else '')
+                'and forcing updates ' if force_update else '', 'to crawl from date {} to {} [{}% completed]'.format(dates[0], dates[-1], round(i/len(dates)*100, 2)) if dates[0] != None else '')
             if get_token_expiration():
                 auth_api()
             for mode in get_list(ranking_modes):
@@ -347,7 +361,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                                 pk = str(illust.id) + "_" + str(i)
                                 local_filename = ""
                                 if (store_mode == "full"):
-                                    extension = os.path.splitext(url)[1]
+                                    extension = get_extension(url)
                                     local_filename = slugify(
                                         f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
                                     if download_reverse_proxy != "":
@@ -371,4 +385,42 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                      str(e) + "\n" + traceback.format_exc())
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
+    crawler_status = "idle"
+
+
+def compress_images(image_quality: int = 75, force_compress: bool = False, delete_original: bool = False):
+    global crawler_status, stop_compression_task
+    q = Query().local_filename.exists() & ~ (Query().local_filename == "")
+    if not force_compress:
+        q = q & (~ Query().local_filename_compressed.exists())
+    results = db.search(q)  # check if local_filename exists
+    crawler_status = "compressing images"
+    count = 0
+    try:
+        for image in results:
+            crawler_status = "compressing images [{}% completed]".format(
+                round((results.index(image)+1)/len(results)*100))
+            if stop_compression_task:
+                logger.log(logging.INFO, "Stopping image compression task")
+                stop_compression_task = False
+                break
+            if not os.path.exists(image["local_filename"]):
+                continue
+            if os.path.exists(image["local_filename"]):
+                original_filename = image["local_filename"]
+                extension = get_extension(original_filename)
+                compressed_filename = original_filename.lower().replace(
+                    extension, '') + "_compressed" + '.jpg'
+                compress_image(original_filename,
+                               compressed_filename, image_quality)
+                if delete_original:
+                    os.remove(original_filename)
+                    original_filename = compressed_filename
+                db.upsert(
+                    Document({"local_filename": original_filename, "local_filename_compressed": compressed_filename}, doc_id=image.doc_id))
+                count += 1
+    except Exception as e:
+        logger.log(logging.ERROR,
+                   "Aborting image compression due to error: " + str(e) + "\n" + traceback.format_exc())
+    logger.log(logging.INFO, "Compressed {} images".format(count))
     crawler_status = "idle"

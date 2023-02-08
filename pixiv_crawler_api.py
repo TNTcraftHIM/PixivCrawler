@@ -13,7 +13,7 @@ from tinydb import TinyDB, where, Query
 
 
 def read_config():
-    global privilege_api_key, reverse_proxy, image_num_limit, author_num_limit, tag_num_limit
+    global privilege_api_key, reverse_proxy, image_num_limit, author_num_limit, tag_num_limit, stop_compression_task
     config = configupdater.ConfigUpdater()
     if not os.path.exists('config.ini'):
         # Create config file
@@ -89,7 +89,8 @@ def read_config():
     config.set("API", "tag_num_limit", tag_num_limit)
     if comment != "":
         config["API"]["tag_num_limit"].add_before.comment(comment)
-
+    # reset stop compression task flag
+    stop_compression_task = False
     # save config
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
@@ -191,6 +192,9 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     for item in results:
         item["url"] = item["url"].replace("i.pximg.net", reverse_proxy)
         del item["local_filename"]
+        # also delete local_filename_compressed if exists
+        if "local_filename_compressed" in item:
+            del item["local_filename_compressed"]
     return JSONResponse({"status": "success", "data": results}, headers={"Access-Control-Allow-Origin": "*", "Content-Type": "application/json; charset=utf-8"})
 
 
@@ -202,7 +206,10 @@ def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = Query
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
     if not results or not results[0]["local_filename"] or not os.path.exists(results[0]["local_filename"]):
         return {"status": "error", "data": "no result"}
-    return FileResponse(results[0]["local_filename"], headers={"Access-Control-Allow-Origin": "*"})
+    filename = results[0]["local_filename"]
+    if "local_filename_compressed" in results[0] and os.path.exists(results[0]["local_filename_compressed"]):
+        filename = results[0]["local_filename_compressed"]
+    return FileResponse(filename, headers={"Access-Control-Allow-Origin": "*"})
 
 
 @app.get("/api/v1/html", description="Get image in a HTML page according to query")
@@ -258,6 +265,19 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
     background_tasks.add_task(
         pixiv_crawler.crawl_images, True, force_update, dates)
     return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}added"}
+
+
+@app.get("/api/v1/compress", description="Compress local images (need api_key to work)")
+# compress local images (need correct api key to work)
+def compress(background_tasks: BackgroundTasks, api_key: str, stop_task: Optional[bool] = QueryParam(default=False, description="Whether to stop compression task if it is running"), force_compress: Optional[bool] = QueryParam(default=False, description="Whether to compress an image if it is already compressed"), delete_original: Optional[bool] = QueryParam(default=False, description="Whether to delete original image after compression (Warning: This operation cannot be undone)"), image_quality: Optional[int] = QueryParam(default=75, description="Image quality for compression (0-100)")):
+    if api_key != privilege_api_key:
+        return {"status": "error", "data": "invalid api key"}
+    pixiv_crawler.stop_compression_task = stop_task
+    if stop_task:
+        return {"status": "success", "data": "image compression task stopped"}
+    background_tasks.add_task(
+        pixiv_crawler.compress_images, image_quality=image_quality, force_compress=force_compress, delete_original=delete_original)
+    return {"status": "success", "data": "image compression task added"}
 
 
 @app.get("/api/v1/reload", description="Reload config for crawler and API (need api_key to work)")

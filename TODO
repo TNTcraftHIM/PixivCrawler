@@ -26,3 +26,7 @@
 [Done] Fix that some images cannot be added into database
 [Done] Add config to minify database file
 [Done] Add crawler status when requesting crawl manually
+[Done] Add image compression (e.g. jpeg) to reduce image size (done manually via API calls)
+
+Add query cache to reduce database query time
+Convert tinyDB to sqlite3 (maybe)
