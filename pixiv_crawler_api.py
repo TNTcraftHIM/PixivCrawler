@@ -275,6 +275,9 @@ def compress(background_tasks: BackgroundTasks, api_key: str, stop_task: Optiona
     pixiv_crawler.stop_compression_task = stop_task
     if stop_task:
         return {"status": "success", "data": "image compression task stopped"}
+    crawler_status = pixiv_crawler.get_crawler_status()
+    if crawler_status != "idle":
+        return {"status": "error", "data": "crawler is currently " + crawler_status + ", please wait until it is done"}
     background_tasks.add_task(
         pixiv_crawler.compress_images, image_quality=image_quality, force_compress=force_compress, delete_original=delete_original)
     return {"status": "success", "data": "image compression task added"}

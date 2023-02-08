@@ -391,6 +391,10 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
 
 def compress_images(image_quality: int = 75, force_compress: bool = False, delete_original: bool = False):
     global crawler_status, stop_compression_task
+    if (crawler_status != "idle"):
+        logger.info("Crawler is currently " +
+                        crawler_status + ", skipping image compression")
+        return
     q = Query().local_filename.exists() & ~ (Query().local_filename == "")
     if not force_compress:
         q = q & (~ Query().local_filename_compressed.exists())
@@ -422,6 +426,6 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                 count += 1
     except Exception as e:
         logger.log(logging.ERROR,
-                   "Aborting image compression due to error: " + str(e) + "\n" + traceback.format_exc())
+                   "Aborting image compression task due to error: " + str(e) + "\n" + traceback.format_exc())
     logger.log(logging.INFO, "Compressed {} images".format(count))
     crawler_status = "idle"
