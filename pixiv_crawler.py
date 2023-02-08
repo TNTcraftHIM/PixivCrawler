@@ -7,12 +7,13 @@ import re
 import unicodedata
 import configupdater
 
-from PIL import Image
+from PIL import Image, ImageFile
 from tinydb import TinyDB, Query
 from tinydb.table import Document
 from pixivpy3 import *
 from pixiv_auth_selenium import get_refresh_token, get_token_expiration
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def slugify(value, allow_unicode=False):
     """
