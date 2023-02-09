@@ -404,7 +404,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
     try:
         for image in results:
             crawler_status = "compressing images [{}% completed]".format(
-                round((results.index(image)+1)/len(results)*100, 2))
+                round((results.index(image))/len(results)*100, 2))
             if stop_compression_task:
                 logger.log(logging.INFO, "Stopping image compression task")
                 stop_compression_task = False
