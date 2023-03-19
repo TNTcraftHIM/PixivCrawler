@@ -144,6 +144,12 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     return results
 
 
+def clear_db_cache():
+    # this function should only be invoked by pixiv_crawler.py
+    db.clear_cache()
+    logger.info("DB cache cleared")
+
+
 def convert_date(date_text):
     try:
         date = datetime.datetime.strptime(date_text, '%Y-%m-%d')
@@ -174,6 +180,7 @@ async def startup_event():
     global logger, db
     logger = logging.getLogger("uvicorn")
     db = TinyDB('db.json', ensure_ascii=False, encoding='utf-8')
+    db = db.table("_default", cache_size=None)
     read_config()
 
 

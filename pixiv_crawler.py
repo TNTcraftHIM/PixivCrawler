@@ -6,6 +6,7 @@ import os
 import re
 import unicodedata
 import configupdater
+import pixiv_crawler_api
 
 from PIL import Image, ImageFile
 from tinydb import TinyDB, Query
@@ -14,6 +15,7 @@ from pixivpy3 import *
 from pixiv_auth_selenium import get_refresh_token, get_token_expiration
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 
 def slugify(value, allow_unicode=False):
     """
@@ -368,15 +370,16 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                                     if download_reverse_proxy != "":
                                         url = url.replace(
                                             "i.pximg.net", download_reverse_proxy)
-                                    if(api.download(url, path=download_folder, name=local_filename)):
-                                        download_count += 1
                                     local_filename = download_folder + os.sep + local_filename
                                 data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
                                         "page_count": illust.page_count, "r18": illust.x_restrict, "ai_type": illust.illust_ai_type, "tags": illust.tags, "url": url, "local_filename": local_filename}
-                                # insert into database
                                 image_count += 1
+                                # insert into database
                                 if (insertDB(pk, data, force_update)):
                                     db_count += 1
+                                    # download images if local_filename is not empty
+                                    if(local_filename and api.download(url, name=local_filename)):
+                                        download_count += 1
                     if (not get_all_ranking_pages):
                         break
                     next_qs = api.parse_qs(json_result.next_url)
@@ -386,6 +389,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                      str(e) + "\n" + traceback.format_exc())
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
+    pixiv_crawler_api.clear_db_cache()
     crawler_status = "idle"
 
 
@@ -393,7 +397,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
     global crawler_status, stop_compression_task
     if (crawler_status != "idle"):
         logger.info("Crawler is currently " +
-                        crawler_status + ", skipping image compression")
+                    crawler_status + ", skipping image compression")
         return
     q = Query().local_filename.exists() & ~ (Query().local_filename == "")
     if not force_compress:
@@ -428,4 +432,5 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
         logger.log(logging.ERROR,
                    "Aborting image compression task due to error: " + str(e) + "\n" + traceback.format_exc())
     logger.log(logging.INFO, "Compressed {} images".format(count))
+    pixiv_crawler_api.clear_db_cache()
     crawler_status = "idle"

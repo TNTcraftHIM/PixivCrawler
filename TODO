@@ -27,6 +27,7 @@
 [Done] Add config to minify database file
 [Done] Add crawler status when requesting crawl manually
 [Done] Add image compression (e.g. jpeg) to reduce image size (done manually via API calls)
+[Done] Add query cache to reduce database query time
+[Done] Fix that crawling will download compressed images again
 
-Add query cache to reduce database query time
 Convert tinyDB to sqlite3 (maybe)
