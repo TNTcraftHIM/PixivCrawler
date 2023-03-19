@@ -8,7 +8,7 @@ import unicodedata
 import configupdater
 import pixiv_crawler_api
 
-from PIL import Image, ImageFile
+from PIL import Image, ImageFile, UnidentifiedImageError
 from tinydb import TinyDB, Query
 from tinydb.table import Document
 from pixivpy3 import *
@@ -368,7 +368,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                                     local_filename = slugify(
                                         f"{str(illust.id)}_{illust.user.name}_{illust.title}_p{str(i)}", True) + extension
                                     if download_reverse_proxy != "":
-                                        url = url.replace(
+                                        download_url = url.replace(
                                             "i.pximg.net", download_reverse_proxy)
                                     local_filename = download_folder + os.sep + local_filename
                                 data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
@@ -378,8 +378,11 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                                 if (insertDB(pk, data, force_update)):
                                     db_count += 1
                                     # download images if local_filename is not empty
-                                    if(local_filename and api.download(url, name=local_filename)):
-                                        download_count += 1
+                                    if(local_filename):
+                                        if (not os.path.exists(download_folder)):
+                                            os.makedirs(download_folder)
+                                        if (api.download(download_url, name=local_filename)):
+                                            download_count += 1
                     if (not get_all_ranking_pages):
                         break
                     next_qs = api.parse_qs(json_result.next_url)
@@ -401,7 +404,8 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
         return
     q = Query().local_filename.exists() & ~ (Query().local_filename == "")
     if not force_compress:
-        q = q & (~ Query().local_filename_compressed.exists())
+        q = q & ((Query().local_filename_compressed == "") |
+                 (~ Query().local_filename_compressed.exists()))
     results = db.search(q)  # check if local_filename exists
     crawler_status = "compressing images"
     count = 0
@@ -420,8 +424,13 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                 extension = get_extension(original_filename)
                 compressed_filename = original_filename.lower().replace(
                     extension, '') + "_compressed" + '.jpg'
-                compress_image(original_filename,
-                               compressed_filename, image_quality)
+                try:
+                    compress_image(original_filename,
+                                   compressed_filename, image_quality)
+                except (FileNotFoundError, UnidentifiedImageError):
+                    logger.log(logging.ERROR,
+                               "Skipping file {} due to being an invalid image".format(original_filename))
+                    continue
                 if delete_original:
                     os.remove(original_filename)
                     original_filename = compressed_filename
@@ -434,3 +443,16 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
     logger.log(logging.INFO, "Compressed {} images".format(count))
     pixiv_crawler_api.clear_db_cache()
     crawler_status = "idle"
+
+
+def remove_local_file(doc_id):
+    image = db.get(doc_id=doc_id)
+    if image:
+        logger.info("Removing file {} and related references".format(image["local_filename"]))
+        if image["local_filename"] and os.path.exists(image["local_filename"]):
+            os.remove(image["local_filename"])
+        if "local_filename_compressed" in image and os.path.exists(image["local_filename_compressed"]):
+            os.remove(image["local_filename_compressed"])
+        db.update({"local_filename": "", "local_filename_compressed": ""},
+                  doc_ids=[doc_id])
+        pixiv_crawler_api.clear_db_cache(dismiss_message=True)

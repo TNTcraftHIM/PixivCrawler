@@ -29,5 +29,8 @@
 [Done] Add image compression (e.g. jpeg) to reduce image size (done manually via API calls)
 [Done] Add query cache to reduce database query time
 [Done] Fix that crawling will download compressed images again
+[Done] Add that when encountering a non-valid image file, the api will keep randomizing until a valid image is found and also remove the non-valid images from database and disk
+[Done] Fix that urls in database gets replaced by reverse proxy
+[Done] Add ID in html response title
 
 Convert tinyDB to sqlite3 (maybe)

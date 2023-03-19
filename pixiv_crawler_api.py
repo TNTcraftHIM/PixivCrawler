@@ -5,6 +5,7 @@ import datetime
 import configupdater
 import pixiv_crawler
 
+from PIL import Image, UnidentifiedImageError
 from typing import Optional, List
 from numpy.random import default_rng
 from fastapi import FastAPI, BackgroundTasks, Query as QueryParam
@@ -144,10 +145,11 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     return results
 
 
-def clear_db_cache():
+def clear_db_cache(dismiss_message: bool = False):
     # this function should only be invoked by pixiv_crawler.py
     db.clear_cache()
-    logger.info("DB cache cleared")
+    if not dismiss_message:
+        logger.info("Database cache cleared")
 
 
 def convert_date(date_text):
@@ -209,13 +211,22 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
 # directly return image file
 def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
-    results = randomDB(r18=r18, id=id, author_ids=author_ids,
-                       author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
-    if not results or not results[0]["local_filename"] or not os.path.exists(results[0]["local_filename"]):
+    filename = ""
+    for _ in range(len(db)):
+        results = randomDB(r18=r18, id=id, author_ids=author_ids,
+                           author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
+        if not results or not results[0]["local_filename"]:
+            return {"status": "error", "data": "no result"}
+        filename = results[0]["local_filename"]
+        if "local_filename_compressed" in results[0] and results[0]["local_filename_compressed"]:
+            filename = results[0]["local_filename_compressed"]
+        try:
+            Image.open(filename)
+            break
+        except (FileNotFoundError, UnidentifiedImageError):
+            pixiv_crawler.remove_local_file(results[0].doc_id)
+    if not filename:
         return {"status": "error", "data": "no result"}
-    filename = results[0]["local_filename"]
-    if "local_filename_compressed" in results[0] and os.path.exists(results[0]["local_filename_compressed"]):
-        filename = results[0]["local_filename_compressed"]
     return FileResponse(filename, headers={"Access-Control-Allow-Origin": "*"})
 
 
@@ -229,7 +240,7 @@ def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     results = results[0]
     url = results["url"].replace("i.pximg.net", reverse_proxy)
     html = "<html style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; background-image: url('{}');\"> <head> <title>{}</title> </head> <body style=\"background-repeat: no-repeat; background-position: center; background-attachment: scroll; background-size: cover; height: 100%; margin: 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); -moz-backdrop-filter: blur(10px); -o-backdrop-filter: blur(10px); -ms-backdrop-filter: blur(10px);\"> <img style=\"display: block; margin-left: auto; margin-right: auto; height: 100%;\" src=\"{}\" /> </body> </html>".format(
-        url, "["+results["author_name"]+"]" + results["title"], url)
+        url, "["+str(results["id"])+"]" + "["+results["author_name"]+"]" + results["title"], url)
     return HTMLResponse(html, headers={"Access-Control-Allow-Origin": "*"})
 
 
