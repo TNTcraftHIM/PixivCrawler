@@ -20,7 +20,7 @@ def migrateDB(db_path: str = "db.json"):
             "tags": item["tags"],
             "url": item["url"],
             "local_filename": item["local_filename"],
-            "local_filename_compressed": item["local_filename_compressed"]
+            "local_filename_compressed": item["local_filename_compressed"] if "local_filename_compressed" in item else "",
         }
         pk = str(item["id"]) + "_p" + str(item["page_no"])
         result = insertDB(pk, data, False)
