@@ -140,6 +140,14 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     return pixiv_crawler.cursor_to_dict(results)
 
 
+def tagDB(picture_id: str):
+    global db
+    cursor = db.cursor()
+    results = cursor.execute(
+        "SELECT name, translated_name FROM tags WHERE tag_id IN (SELECT tag_id FROM picture_tags WHERE picture_id == ?)", (picture_id,))
+    return pixiv_crawler.cursor_to_dict(results)
+
+
 def convert_date(date_text):
     try:
         date = datetime.datetime.strptime(date_text, '%Y-%m-%d')
@@ -192,6 +200,8 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     if not results:
         return {"status": "error", "data": "no result"}
     for item in results:
+        # Look up tags and add to result
+        item["tags"] = tagDB(item["picture_id"])
         item["url"] = item["url"].replace("i.pximg.net", reverse_proxy)
         del item["picture_id"]
         del item["local_filename"]
