@@ -23,8 +23,8 @@ def read_config():
         config.append("\n")
         config.add_section("API")
     if pixiv_crawler.lenDB() == 0:
-        logger.info("First run, crawling before starting")
-        pixiv_crawler.crawl_images()
+        logger.info("Empty database, crawling before starting")
+        pixiv_crawler.crawl_images(manual=True)
     # privilege API key
     comment = ""
     if config.has_option("API", "privilege_api_key") and config["API"]["privilege_api_key"].value != "":
