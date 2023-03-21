@@ -487,6 +487,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                 except (FileNotFoundError, UnidentifiedImageError):
                     logger.log(logging.ERROR,
                                "Skipping file '{}' due to being an invalid image".format(original_filename))
+                    remove_local_file(image["picture_id"])
                     continue
                 if delete_original:
                     os.remove(original_filename)
