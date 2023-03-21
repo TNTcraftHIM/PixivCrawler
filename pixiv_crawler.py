@@ -465,7 +465,8 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
     results = cursor_to_dict(cursor.execute(
         "SELECT * FROM pictures WHERE local_filename != ''{}".format(" AND local_filename_compressed = ''" if not force_compress else "")))
     crawler_status = "compressing images"
-    logger.info("Image compression task started with quality {}%".format(image_quality))
+    logger.info(
+        "Image compression task started with quality {}".format(image_quality))
     count = 0
     try:
         for image in results:
@@ -500,7 +501,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
     except Exception as e:
         logger.log(logging.ERROR,
                    "Aborting image compression task due to error: " + str(e) + "\n" + traceback.format_exc())
-    logger.log(logging.INFO, "Compressed {} images, {} images skipped and removed".format(
+    logger.log(logging.INFO, "Compressed {} images, {} invalid images skipped and removed".format(
         count, len(results) - count))
     crawler_status = "idle"
 
