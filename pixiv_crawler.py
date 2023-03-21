@@ -492,7 +492,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                     os.remove(original_filename)
                     original_filename = compressed_filename
                 cursor.execute(  # update both local_filename and local_filename_compressed
-                    "UPDATE pictures SET local_filename_compressed = ? AND local_filename = ? WHERE picture_id = ?", (compressed_filename, original_filename, image["picture_id"]))
+                    "UPDATE pictures SET local_filename = ?, local_filename_compressed = ? WHERE picture_id = ?", (original_filename, compressed_filename, image["picture_id"]))
                 db.commit()
                 count += 1
     except Exception as e:
