@@ -502,19 +502,21 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
     crawler_status = "idle"
 
 
-def remove_local_file(picture_id):
+def remove_local_file(picture_id, remove_only_compressed: bool = False):
     global db
     cursor = db.cursor()
     image = cursor.execute(
         "SELECT * FROM pictures WHERE picture_id = ?", (picture_id,))
     image = cursor_to_dict(image)[0]
     if image:
+        remove_only_compressed = (
+            image["local_filename_compressed"] != image["local_filename"]) and remove_only_compressed
         print("Removing file '{}' and related references".format(
             image["local_filename"]))
-        if image["local_filename"] and os.path.exists(image["local_filename"]):
+        if not remove_only_compressed and image["local_filename"] and os.path.exists(image["local_filename"]):
             os.remove(image["local_filename"])
         if "local_filename_compressed" in image and os.path.exists(image["local_filename_compressed"]):
             os.remove(image["local_filename_compressed"])
         cursor.execute(
-            "UPDATE pictures SET local_filename = '', local_filename_compressed = '' WHERE picture_id = ?", (picture_id,))
+            "UPDATE pictures SET local_filename_compressed = ''{} WHERE picture_id = ?".format(", local_filename = ''" if not remove_only_compressed else ""), (picture_id,))
         db.commit()

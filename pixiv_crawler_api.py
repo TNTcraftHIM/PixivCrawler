@@ -217,16 +217,19 @@ def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = Query
     for _ in range(pixiv_crawler.lenDB()):
         results = randomDB(r18=r18, id=id, author_ids=author_ids,
                            author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
-        if not results or not results[0]["local_filename"]:
+        if not results:
             return {"status": "error", "data": "no result"}
         filename = results[0]["local_filename"]
+        serving_compressed = False
         if "local_filename_compressed" in results[0] and results[0]["local_filename_compressed"]:
             filename = results[0]["local_filename_compressed"]
+            serving_compressed = True
         try:
             Image.open(filename)
             break
         except (FileNotFoundError, UnidentifiedImageError):
-            pixiv_crawler.remove_local_file(results[0]["picture_id"])
+            pixiv_crawler.remove_local_file(
+                results[0]["picture_id"], serving_compressed)
     if not filename:
         return {"status": "error", "data": "no result"}
     return FileResponse(filename, headers={"Access-Control-Allow-Origin": "*"})
