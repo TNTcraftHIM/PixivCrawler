@@ -1,4 +1,4 @@
-import hashlib
+import sqlite3
 import time
 import logging
 import traceback
@@ -6,11 +6,8 @@ import os
 import re
 import unicodedata
 import configupdater
-import pixiv_crawler_api
 
 from PIL import Image, ImageFile, UnidentifiedImageError
-from tinydb import TinyDB, Query
-from tinydb.table import Document
 from pixivpy3 import *
 from pixiv_auth_selenium import get_refresh_token, get_token_expiration
 
@@ -35,26 +32,105 @@ def slugify(value, allow_unicode=False):
     return re.sub(r'[-\s]+', '-', value).strip('-_')
 
 
-def int_hash(obj):
-    return int(hashlib.md5(obj.encode("utf-8")).hexdigest(), 16)
+def initDB(db_path: str = "db.sqlite3"):
+    db = sqlite3.connect(db_path, check_same_thread=False)
+    cursor = db.cursor()
+
+    # Create pictures table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS pictures (
+    picture_id TEXT PRIMARY KEY,
+    id INTEGER NOT NULL,
+    author_id INTEGER NOT NULL,
+    author_name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    page_no INTEGER NOT NULL,
+    page_count INTEGER NOT NULL,
+    r18 INTEGER NOT NULL,
+    ai_type INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    local_filename TEXT NOT NULL DEFAULT '',
+    local_filename_compressed TEXT NOT NULL DEFAULT ''
+    );''')
+    # Create tags table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS tags (
+    tag_id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    translated_name TEXT UNIQUE
+    );''')
+    # Create picture_tags table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS picture_tags (
+    picture_id TEXT REFERENCES pictures(picture_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    tag_id INTEGER REFERENCES tags(tag_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    PRIMARY KEY (picture_id, tag_id)
+    );''')
+
+    db.commit()
+
+    return db
+
+
+def lenDB():
+    global db
+    cursor = db.cursor()
+    cursor.execute("SELECT COUNT(*) FROM pictures")
+    return cursor.fetchone()[0]
 
 
 def insertDB(pk, data, force_update=False):
     global db
     try:
+        # create a cursor object
+        cursor = db.cursor()
+        # check if force_update is True
         if force_update:
-            if db.upsert(Document(data, doc_id=int_hash(pk))):
-                return True
-            else:
-                return False
-        if db.insert(Document(data, doc_id=int_hash(pk))):
-            return True
+            # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
+            cursor.execute("INSERT OR REPLACE INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count, r18, ai_type, url, local_filename, local_filename_compressed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT local_filename_compressed FROM pictures WHERE picture_id = ?))", ((
+                pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["r18"], data["ai_type"], data["url"], data["local_filename"], pk))
+            # commit changes
+            db.commit()
+            # insert tags
+            for tag in data["tags"]:
+                # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
+                cursor.execute("INSERT OR REPLACE INTO tags (name, translated_name) VALUES (?, ?)", ((
+                    tag["name"], tag["translated_name"])))
+                # commit changes
+                db.commit()
+                # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
+                cursor.execute(
+                    "INSERT OR REPLACE INTO picture_tags (picture_id, tag_id) VALUES (?, (SELECT tag_id FROM tags WHERE name = ?))", ((pk), tag["name"]))
+                # commit changes
+                db.commit()
         else:
-            return False
+            # use the INSERT statement to insert data only if it does not exist
+            cursor.execute("INSERT INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count,r18, ai_type, url, local_filename) VALUES (?, ?, ?, ?, ?, ?, ? , ? , ? , ? , ?)", ((
+                pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["r18"], data["ai_type"], data["url"], data["local_filename"]))
+            # commit changes
+            db.commit()
+            # insert tags
+            for tag in data["tags"]:
+                # use the INSERT OR IGNORE statement to insert data only if it does not exist
+                cursor.execute("INSERT OR IGNORE INTO tags (name, translated_name) VALUES (?, ?)", ((
+                    tag["name"], tag["translated_name"])))
+                # commit changes
+                db.commit()
+                # use the INSERT OR IGNORE statement to insert data only if it does not exist
+                cursor.execute(
+                    "INSERT OR IGNORE INTO picture_tags (picture_id, tag_id) VALUES (?, (SELECT tag_id FROM tags WHERE name = ?))", ((pk), tag["name"]))
+                # commit changes
+                db.commit()
+        return True
     except Exception as e:
         # logger.error("Aborting database insertion due to error: " +
-        #              str(e) + "\n" + traceback.format_exc())
+        #       str(e) + "\n" + traceback.format_exc())
         return False
+
+
+def cursor_to_dict(cursor: sqlite3.Cursor):
+    return [dict((cursor.description[i][0], value)
+                 for i, value in enumerate(row)) for row in cursor.fetchall()]
 
 
 def get_list(string: str):
@@ -62,7 +138,7 @@ def get_list(string: str):
 
 
 def read_config():
-    global api, config, db_path, db_minify, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags, stop_compression_task
+    global api, config, db_path, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags, stop_compression_task
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
@@ -74,25 +150,13 @@ def read_config():
     if not config.has_section("Crawler"):
         config.append("\n")
         config.add_section("Crawler")
-    # get db_path to determine where to store the database (default: db.json)
+    # get db_path to determine where to store the database (default: db.sqlite3)
     if config.has_option("Crawler", "db_path") and config["Crawler"]["db_path"].value != "":
         db_path = config["Crawler"]["db_path"].value
     else:
-        db_path = "db.json"
+        db_path = "db.sqlite3"
         logger.warning("db_path invalid, using default: " + db_path)
     config.set("Crawler", "db_path", db_path)
-    # get db_minify to determine whether to minify the database (default: True)
-    comment = ""
-    if config.has_option("Crawler", "db_minify") and (config["Crawler"]["db_minify"].value in ["True", "False"]):
-        db_minify = bool(config["Crawler"]["db_minify"].value == "True")
-    else:
-        if not config.has_option("Crawler", "db_minify"):
-            comment = "True(reduce size of database file), False(beautify database so it's easier to read)"
-        db_minify = True
-        logger.warning("db_minify invalid, using default: " + str(db_minify))
-    config.set("Crawler", "db_minify", str(db_minify))
-    if comment != "":
-        config["Crawler"]["db_minify"].add_before.comment(comment)
     # get store_mode to determine whether to store images as links or download them (default: light)
     comment = ""
     if config.has_option("Crawler", "store_mode") and (config["Crawler"]["store_mode"].value in ["light", "full"]):
@@ -277,11 +341,7 @@ last_update_timestamp = -1
 dismiss_skip_message = False
 
 # init database
-if db_minify:
-    db = TinyDB(db_path, ensure_ascii=False, encoding='utf-8')
-else:
-    db = TinyDB(db_path, indent=4, separators=(',', ': '),
-                ensure_ascii=False, encoding='utf-8')
+db = initDB(db_path)
 
 
 def crawl_images(manual=False, force_update=False, dates=[None]):
@@ -392,21 +452,18 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                      str(e) + "\n" + traceback.format_exc())
     logger.info(
         f"Crawled {image_count} images, {db_count} images added to database, {download_count} images downloaded")
-    pixiv_crawler_api.clear_db_cache()
     crawler_status = "idle"
 
 
 def compress_images(image_quality: int = 75, force_compress: bool = False, delete_original: bool = False):
-    global crawler_status, stop_compression_task
+    global db, crawler_status, stop_compression_task
     if (crawler_status != "idle"):
         logger.info("Crawler is currently " +
                     crawler_status + ", skipping image compression")
         return
-    q = Query().local_filename.exists() & ~ (Query().local_filename == "")
-    if not force_compress:
-        q = q & ((Query().local_filename_compressed == "") |
-                 (~ Query().local_filename_compressed.exists()))
-    results = db.search(q)  # check if local_filename exists
+    cursor = db.cursor()
+    results = cursor_to_dict(cursor.execute(
+        "SELECT * FROM pictures WHERE local_filename != ''{}".format(" AND local_filename_compressed = ''" if not force_compress else "")))
     crawler_status = "compressing images"
     count = 0
     try:
@@ -429,30 +486,35 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                                    compressed_filename, image_quality)
                 except (FileNotFoundError, UnidentifiedImageError):
                     logger.log(logging.ERROR,
-                               "Skipping file {} due to being an invalid image".format(original_filename))
+                               "Skipping file '{}' due to being an invalid image".format(original_filename))
                     continue
                 if delete_original:
                     os.remove(original_filename)
                     original_filename = compressed_filename
-                db.upsert(
-                    Document({"local_filename": original_filename, "local_filename_compressed": compressed_filename}, doc_id=image.doc_id))
+                cursor.execute(  # update both local_filename and local_filename_compressed
+                    "UPDATE pictures SET local_filename_compressed = ? AND local_filename = ? WHERE picture_id = ?", (compressed_filename, original_filename, image["picture_id"]))
+                db.commit()
                 count += 1
     except Exception as e:
         logger.log(logging.ERROR,
                    "Aborting image compression task due to error: " + str(e) + "\n" + traceback.format_exc())
     logger.log(logging.INFO, "Compressed {} images".format(count))
-    pixiv_crawler_api.clear_db_cache()
     crawler_status = "idle"
 
 
-def remove_local_file(doc_id):
-    image = db.get(doc_id=doc_id)
+def remove_local_file(picture_id):
+    global db
+    cursor = db.cursor()
+    image = cursor.execute(
+        "SELECT * FROM pictures WHERE picture_id = ?", (picture_id,))
+    image = cursor_to_dict(image)[0]
     if image:
-        logger.info("Removing file {} and related references".format(image["local_filename"]))
+        print("Removing file '{}' and related references".format(
+            image["local_filename"]))
         if image["local_filename"] and os.path.exists(image["local_filename"]):
             os.remove(image["local_filename"])
         if "local_filename_compressed" in image and os.path.exists(image["local_filename_compressed"]):
             os.remove(image["local_filename_compressed"])
-        db.update({"local_filename": "", "local_filename_compressed": ""},
-                  doc_ids=[doc_id])
-        pixiv_crawler_api.clear_db_cache(dismiss_message=True)
+        cursor.execute(
+            "UPDATE pictures SET local_filename = '', local_filename_compressed = '' WHERE picture_id = ?", (picture_id,))
+        db.commit()

@@ -1,5 +1,4 @@
 import os
-import re
 import logging
 import datetime
 import configupdater
@@ -10,11 +9,10 @@ from typing import Optional, List
 from numpy.random import default_rng
 from fastapi import FastAPI, BackgroundTasks, Query as QueryParam
 from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse, JSONResponse
-from tinydb import TinyDB, where, Query
 
 
 def read_config():
-    global privilege_api_key, reverse_proxy, image_num_limit, author_num_limit, tag_num_limit, stop_compression_task
+    global db, privilege_api_key, reverse_proxy, image_num_limit, author_num_limit, tag_num_limit, stop_compression_task
     config = configupdater.ConfigUpdater()
     if not os.path.exists('config.ini'):
         # Create config file
@@ -24,7 +22,7 @@ def read_config():
     if not config.has_section("API"):
         config.append("\n")
         config.add_section("API")
-    if len(db) == 0:
+    if pixiv_crawler.lenDB() == 0:
         logger.info("First run, crawling before starting")
         pixiv_crawler.crawl_images()
     # privilege API key
@@ -99,57 +97,47 @@ def read_config():
 
 
 def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] = [], author_names: List[str] = [], title: str = "", ai_type: int = None, tags: List[str] = [], local_file: bool = False):
-    if len(db) == 0:
-        return
+    global db
+    cursor = db.cursor()
+    if pixiv_crawler.lenDB() == 0:
+        return []
     if r18 not in [0, 1, 2]:
         r18 = 2
-    baseq = where("r18").one_of([0, 1])
     if r18 in [0, 1]:
-        q = where("r18") == r18
+        q = "r18 == " + str(r18)
     else:
-        q = baseq
+        q = "r18 IN (0, 1)"
     if num < 1:
         num = 1
     if num > image_num_limit:
         num = image_num_limit
     if id != None:
-        q = q & (where("id") == id)
+        q = q + " AND " + "id == " + str(id)
     if author_ids != []:
         if len(author_ids) > author_num_limit:
             author_ids = (author_ids)[:author_num_limit]
-        q = q & where("author_id").one_of(author_ids)
+        q = q + " AND " + "author_id IN " + \
+            str(author_ids).replace("[", "(").replace("]", ")")
     if author_names != []:
         if len(author_names) > author_num_limit:
             author_names = (author_names)[:author_num_limit]
-        q = q & where("author_name").matches(
-            r"(?=("+'|'.join(author_names)+r"))", flags=re.IGNORECASE)
+        q = q + " AND " + "(" + " OR ".join(["author_name LIKE '%" + name +
+                                             "%'" for name in author_names]) + ")"
     if title != "":
-        q = q & where("title").search(title)
+        q = q + " AND " + "title LIKE '%" + title + "%'"
     if ai_type != None:
-        q = q & (where("ai_type") == ai_type)
+        q = q + " AND " + "ai_type == " + str(ai_type)
     if tags != []:
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
-        q = q & Query().tags.any(Query().translated_name.matches(r"(?=("+'|'.join(tags)+r"))",
-                                                                 flags=re.IGNORECASE) | Query().name.matches(r"(?=("+'|'.join(tags)+r"))", flags=re.IGNORECASE))
+        q += " AND picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT tag_id FROM tags WHERE name LIKE '%" + \
+            "%' OR name LIKE '%".join(tags) + "%' OR translated_name LIKE '%" + \
+            "%' OR translated_name LIKE '%".join(tags) + "%'))"
     if local_file:
-        q = q & where("local_filename").matches(r".+")
-    if q == baseq:
-        results = db.all()
-    else:
-        results = db.search(q)
-    results_len = len(results)
-    if results_len < num:
-        num = results_len
-    results = list(random.choice(results, num, replace=False))
-    return results
-
-
-def clear_db_cache(dismiss_message: bool = False):
-    # this function should only be invoked by pixiv_crawler.py
-    db.clear_cache()
-    if not dismiss_message:
-        logger.info("Database cache cleared")
+        q = q + " AND " + "local_filename != ''"
+    results = cursor.execute(
+        "SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures WHERE ({}) ORDER BY RANDOM() LIMIT {})".format(q, num))
+    return pixiv_crawler.cursor_to_dict(results)
 
 
 def convert_date(date_text):
@@ -181,9 +169,14 @@ random = default_rng()
 async def startup_event():
     global logger, db
     logger = logging.getLogger("uvicorn")
-    db = TinyDB('db.json', ensure_ascii=False, encoding='utf-8')
-    db = db.table("_default", cache_size=None)
+    db = pixiv_crawler.initDB()
     read_config()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global db
+    db.close()
 
 
 @app.get("/", description="Get PixivCrawler API credit info and crawler status")
@@ -200,10 +193,9 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
         return {"status": "error", "data": "no result"}
     for item in results:
         item["url"] = item["url"].replace("i.pximg.net", reverse_proxy)
+        del item["picture_id"]
         del item["local_filename"]
-        # also delete local_filename_compressed if exists
-        if "local_filename_compressed" in item:
-            del item["local_filename_compressed"]
+        del item["local_filename_compressed"]
     return JSONResponse({"status": "success", "data": results}, headers={"Access-Control-Allow-Origin": "*", "Content-Type": "application/json; charset=utf-8"})
 
 
@@ -212,7 +204,7 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
 def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
     filename = ""
-    for _ in range(len(db)):
+    for _ in range(pixiv_crawler.lenDB()):
         results = randomDB(r18=r18, id=id, author_ids=author_ids,
                            author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
         if not results or not results[0]["local_filename"]:
@@ -224,7 +216,7 @@ def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = Query
             Image.open(filename)
             break
         except (FileNotFoundError, UnidentifiedImageError):
-            pixiv_crawler.remove_local_file(results[0].doc_id)
+            pixiv_crawler.remove_local_file(results[0]["picture_id"])
     if not filename:
         return {"status": "error", "data": "no result"}
     return FileResponse(filename, headers={"Access-Control-Allow-Origin": "*"})

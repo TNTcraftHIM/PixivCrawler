@@ -32,5 +32,6 @@
 [Done] Add that when encountering a non-valid image file, the api will keep randomizing until a valid image is found and also remove the non-valid images from database and disk
 [Done] Fix that urls in database gets replaced by reverse proxy
 [Done] Add ID in html response title
+[Done] Convert tinyDB to sqlite3
 
-Convert tinyDB to sqlite3 (maybe)
+Write a proper home page for the project
