@@ -101,42 +101,42 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     cursor = db.cursor()
     if pixiv_crawler.lenDB() == 0:
         return []
+    qs = []
     if r18 not in [0, 1, 2]:
         r18 = 2
     if r18 in [0, 1]:
-        q = "r18 == " + str(r18)
-    else:
-        q = "r18 IN (0, 1)"
+        qs.append("r18 == " + str(r18))
     if num < 1:
         num = 1
     if num > image_num_limit:
         num = image_num_limit
     if id != None:
-        q = q + " AND " + "id == " + str(id)
+        qs.append("id == " + str(id))
     if author_ids != []:
         if len(author_ids) > author_num_limit:
             author_ids = (author_ids)[:author_num_limit]
-        q = q + " AND " + "author_id IN " + \
-            str(author_ids).replace("[", "(").replace("]", ")")
+        qs.append("author_id IN " +
+                  str(author_ids).replace("[", "(").replace("]", ")"))
     if author_names != []:
         if len(author_names) > author_num_limit:
             author_names = (author_names)[:author_num_limit]
-        q = q + " AND " + "(" + " OR ".join(["author_name LIKE '%" + name +
-                                             "%'" for name in author_names]) + ")"
+        qs.append("(" + " OR ".join(["author_name LIKE '%" + name +
+                                     "%'" for name in author_names]) + ")")
     if title != "":
-        q = q + " AND " + "title LIKE '%" + title + "%'"
+        qs.append("title LIKE '%" + title + "%'")
     if ai_type != None:
-        q = q + " AND " + "ai_type == " + str(ai_type)
+        qs.append("ai_type == " + str(ai_type))
     if tags != []:
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
-        q += " AND picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT tag_id FROM tags WHERE name LIKE '%" + \
-            "%' OR name LIKE '%".join(tags) + "%' OR translated_name LIKE '%" + \
-            "%' OR translated_name LIKE '%".join(tags) + "%'))"
+        qs.append("picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT tag_id FROM tags WHERE name LIKE '%" +
+                  "%' OR name LIKE '%".join(tags) + "%' OR translated_name LIKE '%" +
+                  "%' OR translated_name LIKE '%".join(tags) + "%'))")
     if local_file:
-        q = q + " AND " + "local_filename != ''"
+        qs.append("local_filename != ''")
+    q = " AND ".join(qs)
     results = cursor.execute(
-        "SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures WHERE ({}) ORDER BY RANDOM() LIMIT {})".format(q, num))
+        "SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures {}ORDER BY RANDOM() LIMIT {})".format("WHERE ({}) ".format(q) if q else "", num))
     return pixiv_crawler.cursor_to_dict(results)
 
 
