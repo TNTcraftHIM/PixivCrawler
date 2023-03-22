@@ -66,6 +66,13 @@ def initDB(db_path: str = "db.sqlite3"):
     tag_id INTEGER REFERENCES tags(tag_id) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (picture_id, tag_id)
     );''')
+    # Create index for tags table on name and translated_name
+    cursor.execute('''
+    CREATE INDEX IF NOT EXISTS tags_name_index ON tags (name);
+    ''')
+    cursor.execute('''
+    CREATE INDEX IF NOT EXISTS tags_translated_name_index ON tags (translated_name);
+    ''')
 
     db.commit()
 
