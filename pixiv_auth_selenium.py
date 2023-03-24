@@ -4,12 +4,12 @@ import json
 import re
 import logging
 import requests
+import traceback
 import configupdater
 
 from argparse import ArgumentParser
 from base64 import urlsafe_b64encode
 from hashlib import sha256
-from pprint import pprint
 from secrets import token_urlsafe
 from sys import exit
 from urllib.parse import urlencode
@@ -60,11 +60,10 @@ if (global_proxy != ""):
         'proxies': {
             'https': global_proxy,
             'http': global_proxy
-        },
-        'verify': False,
+        }
     }
 else:
-    REQUESTS_KWARGS = {'verify': False}
+    REQUESTS_KWARGS = {}
 
 global_refresh_token = ""
 global_expires_in = -1
@@ -92,9 +91,9 @@ def print_auth_token_response(response, log_info=False):
     try:
         access_token = data["access_token"]
         refresh_token = data["refresh_token"]
-    except KeyError:
-        logger.critical("Error:")
-        pprint(data)
+    except KeyError as e:
+        logger.critical("Aborting authentication due to error: " +
+                        str(e) + "\n" + traceback.format_exc())
         exit(1)
 
     expires_in = data.get("expires_in", 0)
@@ -185,7 +184,7 @@ def login(visible=False, log_info=False):
                 warning_needed = False
         time.sleep(1)
     else:
-        logger.critical(
+        logger.warning(
             "Timeout (30s), please try again from the beginning with a new visible browser window")
         driver.quit()
         return login(visible=True)
@@ -205,24 +204,39 @@ def login(visible=False, log_info=False):
 
     logger.info("Get code: " + code)
 
-    response = requests.post(
-        AUTH_TOKEN_URL,
-        data={
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "code": code,
-            "code_verifier": code_verifier,
-            "grant_type": "authorization_code",
-            "include_policy": "true",
-            "redirect_uri": REDIRECT_URI,
-        },
-        headers={
-            "user-agent": USER_AGENT,
-            "app-os-version": "14.6",
-            "app-os": "ios",
-        },
-        **REQUESTS_KWARGS
-    )
+    while True:
+        try:
+            response = requests.post(
+                AUTH_TOKEN_URL,
+                data={
+                    "client_id": CLIENT_ID,
+                    "client_secret": CLIENT_SECRET,
+                    "code": code,
+                    "code_verifier": code_verifier,
+                    "grant_type": "authorization_code",
+                    "include_policy": "true",
+                    "redirect_uri": REDIRECT_URI,
+                },
+                headers={
+                    "user-agent": USER_AGENT,
+                    "app-os-version": "14.6",
+                    "app-os": "ios",
+                },
+                **REQUESTS_KWARGS
+            )
+            break
+        except requests.exceptions.SSLError as e:
+            if "verify" in REQUESTS_KWARGS and not REQUESTS_KWARGS["verify"]:
+                logger.critical("Aborting authentication due to error: " +
+                                str(e) + "\n" + traceback.format_exc())
+                exit(1)
+            logger.warning(
+                "SSL error, trying again with ssl verification disabled")
+            REQUESTS_KWARGS["verify"] = False
+        except e:
+            logger.critical("Aborting authentication due to error: " +
+                            str(e) + "\n" + traceback.format_exc())
+            exit(1)
 
     print_auth_token_response(response, log_info=log_info)
 
@@ -294,7 +308,11 @@ def get_refresh_token(log_info=False):
 
 
 def get_token_expiration():
-    return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)
+    config.read("config.ini")
+    if (config.has_section("Auth")):
+        if (config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")):
+            return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)
+    return True
 
 
 def get_proxy():

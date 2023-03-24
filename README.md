@@ -15,6 +15,8 @@ You could find the API documents and try all the functionalities out at `http://
 # Note
 This crawler needs a valid Pixiv account to work, please enter your username and password in command prompt when running for the first time
 
+If you encounter any network related errors, please try to set `http_proxy` in config.ini under [Auth] section to your proxy server's address (e.g. `http_proxy=http://127.0.0.1:7890`)
+
 When captcha resolving is needed, if using a CLI system, please use `python pixiv_auth_selenium.py login` in a system with GUI and record and paste `referesh_token` in config.ini under [Auth] section as `refresh_token=YourRefreshToken`, and run the crawler again
 
 If you need to migrate your db.json (TinyDB) to latest db.sqlite3 (SQLite3, which is having much better performance), please use `python migrate.py` and follow the instructions in the console to migrate your db.json to db.sqlite3 (replace `db.json` with your db file name if you are using a different name), and you may also need to change the `db_path` in config.ini to `db_path=db.sqlite3` after migration is finished
