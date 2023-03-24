@@ -4,12 +4,12 @@ import json
 import re
 import logging
 import requests
+import traceback
 import configupdater
 
 from argparse import ArgumentParser
 from base64 import urlsafe_b64encode
 from hashlib import sha256
-from pprint import pprint
 from secrets import token_urlsafe
 from sys import exit
 from urllib.parse import urlencode
@@ -24,10 +24,10 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 # init logger
 logger = logging.getLogger("uvicorn")
 
-# Get login credentials
+# Get login credentials and proxy from config file
+global_proxy = ""
 global_username = ""
 global_password = ""
-
 config = configupdater.ConfigUpdater()
 if not os.path.exists('config.ini'):
     # Create config file
@@ -36,6 +36,10 @@ if not os.path.exists('config.ini'):
 config.read('config.ini')
 if (not config.has_section("Auth")):
     config.add_section("Auth")
+if (not config.has_option("Auth", "http_proxy")):
+    config.set("Auth", "http_proxy", "")
+else:
+    global_proxy = config["Auth"]["http_proxy"].value
 if (config.has_option("Auth", "pixiv_username") and config.has_option("Auth", "pixiv_password")):
     global_username = config["Auth"]["pixiv_username"].value
     global_password = config["Auth"]["pixiv_password"].value
@@ -51,12 +55,15 @@ LOGIN_URL = "https://app-api.pixiv.net/web/v1/login"
 AUTH_TOKEN_URL = "https://oauth.secure.pixiv.net/auth/token"
 CLIENT_ID = "MOBrBDS8blbauoSck0ZfDbtuzpyT"
 CLIENT_SECRET = "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj"
-REQUESTS_KWARGS = {
-    # 'proxies': {
-    #     'https': 'http://127.0.0.1:1087',
-    # },
-    # 'verify': False
-}
+if (global_proxy != ""):
+    REQUESTS_KWARGS = {
+        'proxies': {
+            'https': global_proxy,
+            'http': global_proxy
+        }
+    }
+else:
+    REQUESTS_KWARGS = {}
 
 global_refresh_token = ""
 global_expires_in = -1
@@ -84,9 +91,9 @@ def print_auth_token_response(response, log_info=False):
     try:
         access_token = data["access_token"]
         refresh_token = data["refresh_token"]
-    except KeyError:
-        logger.critical("Error:")
-        pprint(data)
+    except KeyError as e:
+        logger.critical("Aborting authentication due to error: " +
+                        str(e) + "\n" + traceback.format_exc())
         exit(1)
 
     expires_in = data.get("expires_in", 0)
@@ -118,19 +125,19 @@ def get_webdriver(headless=False):
     return driver
 
 
-def login(captcha=False, log_info=False):
+def login(visible=False, log_info=False):
     global global_username, global_password
     # logging in with username and password (if there is one in the config file, otherwise wait for user input)
     if (global_username == "" and global_password == ""):
-        if not captcha:
+        if not visible:
             gui = input(
                 "Do you want to use the browser GUI? (y/n, default n): ").lower()
-        if (captcha or gui == "y" or gui == "yes"):
-            captcha = True
+        if (visible or gui == "y" or gui == "yes"):
+            visible = True
         else:
             global_username = input("Enter pixiv_username: ")
             global_password = input("Enter pixiv_password: ")
-    driver = get_webdriver(not captcha)
+    driver = get_webdriver(not visible)
     code_verifier, code_challenge = oauth_pkce(s256)
     login_params = {
         "code_challenge": code_challenge,
@@ -154,7 +161,7 @@ def login(captcha=False, log_info=False):
     else:
         logger.warning(
             "No username and password specified, please login manually in the browser window")
-    if captcha:
+    if visible:
         warning_needed = True
     for _ in range(30):
         # wait for login
@@ -166,20 +173,21 @@ def login(captcha=False, log_info=False):
         if driver.current_url[:40] == "https://accounts.pixiv.net/post-redirect":
             break
         if driver.find_elements(By.CLASS_NAME, 'dKhCxY'):
-            if not captcha:
+            if not visible:
                 logger.warning(
                     "Captcha detected, opening a new visible browser window")
                 driver.quit()
-                return login(captcha=True)
-            if captcha and warning_needed:
+                return login(visible=True)
+            if visible and warning_needed:
                 logger.warning(
                     "Please reolve the captcha manually in the browser window")
                 warning_needed = False
         time.sleep(1)
     else:
-        logger.critical("Timeout, please try again from the beginning")
+        logger.warning(
+            "Timeout (30s), please try again from the beginning with a new visible browser window")
         driver.quit()
-        return login()
+        return login(visible=True)
 
     # filter code url from performance logs
     code = None
@@ -196,24 +204,39 @@ def login(captcha=False, log_info=False):
 
     logger.info("Get code: " + code)
 
-    response = requests.post(
-        AUTH_TOKEN_URL,
-        data={
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "code": code,
-            "code_verifier": code_verifier,
-            "grant_type": "authorization_code",
-            "include_policy": "true",
-            "redirect_uri": REDIRECT_URI,
-        },
-        headers={
-            "user-agent": USER_AGENT,
-            "app-os-version": "14.6",
-            "app-os": "ios",
-        },
-        **REQUESTS_KWARGS
-    )
+    while True:
+        try:
+            response = requests.post(
+                AUTH_TOKEN_URL,
+                data={
+                    "client_id": CLIENT_ID,
+                    "client_secret": CLIENT_SECRET,
+                    "code": code,
+                    "code_verifier": code_verifier,
+                    "grant_type": "authorization_code",
+                    "include_policy": "true",
+                    "redirect_uri": REDIRECT_URI,
+                },
+                headers={
+                    "user-agent": USER_AGENT,
+                    "app-os-version": "14.6",
+                    "app-os": "ios",
+                },
+                **REQUESTS_KWARGS
+            )
+            break
+        except requests.exceptions.SSLError as e:
+            if "verify" in REQUESTS_KWARGS and not REQUESTS_KWARGS["verify"]:
+                logger.critical("Aborting authentication due to error: " +
+                                str(e) + "\n" + traceback.format_exc())
+                exit(1)
+            logger.warning(
+                "SSL error, trying again with ssl verification disabled")
+            REQUESTS_KWARGS["verify"] = False
+        except e:
+            logger.critical("Aborting authentication due to error: " +
+                            str(e) + "\n" + traceback.format_exc())
+            exit(1)
 
     print_auth_token_response(response, log_info=log_info)
 
@@ -238,7 +261,7 @@ def refresh(refresh_token, log_info=False):
     print_auth_token_response(response, log_info=log_info)
 
 
-def get_refresh_token(log_info=False, force_refresh=False):
+def get_refresh_token(log_info=False):
     global global_refresh_token, global_expires_in, global_username, global_password
     refresh_token = ""
     token_expired = False
@@ -285,7 +308,15 @@ def get_refresh_token(log_info=False, force_refresh=False):
 
 
 def get_token_expiration():
-    return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)
+    config.read("config.ini")
+    if (config.has_section("Auth")):
+        if (config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")):
+            return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)
+    return True
+
+
+def get_proxy():
+    return global_proxy
 
 
 def main():
