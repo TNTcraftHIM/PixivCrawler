@@ -9,7 +9,7 @@ import configupdater
 
 from PIL import Image, ImageFile, UnidentifiedImageError
 from pixivpy3 import *
-from pixiv_auth_selenium import get_refresh_token, get_token_expiration
+from pixiv_auth_selenium import get_refresh_token, get_token_expiration, get_proxy
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -305,7 +305,16 @@ def read_config():
 
 def auth_api(log_info=False):
     global api
+    # init api
     refreshtoken = get_refresh_token(log_info=log_info)
+    proxy = get_proxy()
+    REQUESTS_KWARGS = {
+        'proxies': {
+            'https': proxy,
+            'http': proxy
+        }
+    }
+    api = AppPixivAPI(**REQUESTS_KWARGS)
     api.auth(refresh_token=refreshtoken)
     if log_info:
         user_detail = api.user_detail(api.user_id)
@@ -330,9 +339,6 @@ def compress_image(image_path, output_path, quality):
 def get_extension(filename):
     return os.path.splitext(filename)[1]
 
-
-# init api
-api = AppPixivAPI()
 
 # init logger
 logger = logging.getLogger("uvicorn")
