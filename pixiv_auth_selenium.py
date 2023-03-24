@@ -120,6 +120,16 @@ def get_webdriver(headless=False):
 
 def login(captcha=False, log_info=False):
     global global_username, global_password
+    # logging in with username and password (if there is one in the config file, otherwise wait for user input)
+    if (global_username == "" and global_password == ""):
+        if not captcha:
+            gui = input(
+                "Do you want to use the browser GUI? (y/n, default n): ").lower()
+        if (captcha or gui == "y" or gui == "yes"):
+            captcha = True
+        else:
+            global_username = input("Enter pixiv_username: ")
+            global_password = input("Enter pixiv_password: ")
     driver = get_webdriver(not captcha)
     code_verifier, code_challenge = oauth_pkce(s256)
     login_params = {
@@ -128,26 +138,16 @@ def login(captcha=False, log_info=False):
         "client": "pixiv-android",
     }
     logger.info("Gen code_verifier: " + code_verifier)
-
     driver.get(f"{LOGIN_URL}?{urlencode(login_params)}")
-
-    # logging in with username and password (if there is one in the config file, otherwise wait for user input)
-    if (global_username == "" and global_password == ""):
-        global_username = input("Enter pixiv_username: ")
-        global_password = input("Enter pixiv_password: ")
     if (global_username != "" and global_password != ""):
         element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "degQSE")))
         element.click()
-        time.sleep(1)
         element.send_keys(global_username)
-        time.sleep(1)
         element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "hfoSmp")))
         element.click()
-        time.sleep(1)
         element.send_keys(global_password)
-        time.sleep(1)
         element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "fguACh")))
         element.click()
@@ -156,8 +156,13 @@ def login(captcha=False, log_info=False):
             "No username and password specified, please login manually in the browser window")
     if captcha:
         warning_needed = True
-    while True:
+    for _ in range(30):
         # wait for login
+        if driver.find_elements(By.CLASS_NAME, 'ezCrnB') or driver.find_elements(By.CLASS_NAME, 'hUudDN'):
+            logger.warning(
+                "Wrong username or password, please try again from the beginning")
+            driver.quit()
+            return login()
         if driver.current_url[:40] == "https://accounts.pixiv.net/post-redirect":
             break
         if driver.find_elements(By.CLASS_NAME, 'dKhCxY'):
@@ -171,6 +176,10 @@ def login(captcha=False, log_info=False):
                     "Please reolve the captcha manually in the browser window")
                 warning_needed = False
         time.sleep(1)
+    else:
+        logger.critical("Timeout, please try again from the beginning")
+        driver.quit()
+        return login()
 
     # filter code url from performance logs
     code = None
@@ -229,7 +238,7 @@ def refresh(refresh_token, log_info=False):
     print_auth_token_response(response, log_info=log_info)
 
 
-def get_refresh_token(log_info=False):
+def get_refresh_token(log_info=False, force_refresh=False):
     global global_refresh_token, global_expires_in, global_username, global_password
     refresh_token = ""
     token_expired = False
@@ -242,7 +251,7 @@ def get_refresh_token(log_info=False):
 
     if (config.has_option("Auth", "refresh_token")):
         refresh_token = config["Auth"]["refresh_token"].value
-        if (not (config["Auth"]["refresh_token"].value != "" and config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")) or ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value))):
+        if (not (config["Auth"]["refresh_token"].value != "" and config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")) or ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)):
             token_expired = True
 
     if not token_expired and refresh_token != "":
@@ -276,7 +285,7 @@ def get_refresh_token(log_info=False):
 
 
 def get_token_expiration():
-    return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value))
+    return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)
 
 
 def main():

@@ -34,4 +34,5 @@
 [Done] Add ID in html response title
 [Done] Convert tinyDB to sqlite3
 
+Add proxy support for crawling and authentication
 Write a proper home page for the project
