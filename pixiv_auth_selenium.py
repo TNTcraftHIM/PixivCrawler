@@ -175,7 +175,8 @@ def login(visible=False, log_info=False):
             "No username and password specified, please login manually in the browser window")
     if visible:
         warning_needed = True
-    for _ in range(30):
+    time_count = 0
+    while time_count < 30 or visible:
         # wait for login
         if driver.find_elements(By.CLASS_NAME, 'ezCrnB') or driver.find_elements(By.CLASS_NAME, 'hUudDN'):
             logger.warning(

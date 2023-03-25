@@ -22,9 +22,6 @@ def read_config():
     if not config.has_section("API"):
         config.append("\n")
         config.add_section("API")
-    if pixiv_crawler.lenDB() == 0:
-        logger.info("Empty database, crawling before starting")
-        pixiv_crawler.crawl_images(manual=True)
     # privilege API key
     comment = ""
     if config.has_option("API", "privilege_api_key") and config["API"]["privilege_api_key"].value != "":
@@ -94,6 +91,8 @@ def read_config():
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
     logger.log(logging.INFO, "API config loaded")
+    if pixiv_crawler.lenDB() == 0:
+        logger.warning("Empty database, please crawl images using /api/v1/crawl function with your privilege API key: " + privilege_api_key + " (e.g. /api/v1/crawl?api_key=" + privilege_api_key + ")")
 
 
 def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] = [], author_names: List[str] = [], title: str = "", ai_type: int = None, tags: List[str] = [], local_file: bool = False):

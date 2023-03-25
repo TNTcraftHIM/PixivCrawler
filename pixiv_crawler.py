@@ -172,7 +172,7 @@ def read_config():
         if not config.has_option("Crawler", "store_mode"):
             comment = (
                 "light(store image urls only, functions under /api/v1/img will not work), full(store images locally)")
-        store_mode = "full"
+        store_mode = "light"
         logger.warning("store_mode invalid, using default: " + store_mode)
     config.set("Crawler", "store_mode", store_mode)
     if comment != "":
@@ -283,8 +283,8 @@ def read_config():
     else:
         if (not config.has_option("Crawler", "update_interval")):
             comment = (
-                "minimum interval (seconds) between each background crawl when user is calling the API (set to 0 to disable background crawl)")
-        update_interval = 86400
+                "minimum interval (seconds) between each automatic crawl when user is calling the API (set to 0 to disable automatic crawl)")
+        update_interval = 0
         logger.warning(
             "update_interval invalid, using default: " + str(update_interval))
     config.set("Crawler", "update_interval", str(update_interval))
