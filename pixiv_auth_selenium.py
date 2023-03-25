@@ -115,11 +115,23 @@ def get_webdriver(headless=False):
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('blink-settings=imagesEnabled=false')
+    if (global_proxy != ""):
+        options.add_argument('--proxy-server=%s' % global_proxy)
     # if username and password are specified, run in headless mode
     if (headless):
         options.add_argument("--headless")
-    service = ChromeService(ChromeDriverManager().install())
+    try:
+        service = ChromeService(ChromeDriverManager().install())
+    except requests.exceptions.SSLError as e:
+        if (os.environ.get('WDM_SSL_VERIFY') == '0'):
+            logger.critical("Aborting authentication due to error: " +
+                            str(e) + "\n" + traceback.format_exc())
+            exit(1)
+        os.environ['WDM_SSL_VERIFY'] = '0'
+    except e:
+        logger.critical("Aborting authentication due to error: " +
+                        str(e) + "\n" + traceback.format_exc())
+        exit(1)
     driver = webdriver.Chrome(
         service=service, options=options, desired_capabilities=caps)
     return driver
