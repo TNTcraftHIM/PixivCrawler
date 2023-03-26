@@ -141,7 +141,11 @@ def cursor_to_dict(cursor: sqlite3.Cursor):
 
 
 def get_list(string: str):
-    return [x.strip() for x in string.split(",")]
+    list = []
+    for x in string.split(","):
+        if x:
+            list.append(x)
+    return list
 
 
 def read_config():
@@ -259,23 +263,33 @@ def read_config():
     if comment != "":
         config["Crawler"]["get_all_ranking_pages"].add_before.comment(comment)
     # get allow_multiple_pages flag (default: False)
+    comment = ""
     if config.has_option("Crawler", "allow_multiple_pages"):
         allow_multiple_pages = bool(
             config["Crawler"]["allow_multiple_pages"].value.capitalize() == "True")
     else:
+        comment = (
+            "True(allow illustrations with multiple pages), False(only get illustrations with one page)")
         allow_multiple_pages = False
         logger.warning("allow_multiple_pages invalid, using default: " +
                        str(allow_multiple_pages))
     config.set("Crawler", "allow_multiple_pages", allow_multiple_pages)
+    if comment != "":
+        config["Crawler"]["allow_multiple_pages"].add_before.comment(comment)
     # get get_all_multiple_pages flag (default: False, only get the first page)
+    comment = ""
     if config.has_option("Crawler", "get_all_multiple_pages"):
         get_all_multiple_pages = bool(
             config["Crawler"]["get_all_multiple_pages"].value.capitalize() == "True")
     else:
+        comment = (
+            "True(get all pages of illustrations with multiple pages), False(only get the first page)")
         get_all_multiple_pages = False
         logger.warning("get_all_multiple_pages invalid, using default: " +
                        str(get_all_multiple_pages))
     config.set("Crawler", "get_all_multiple_pages", get_all_multiple_pages)
+    if comment != "":
+        config["Crawler"]["get_all_multiple_pages"].add_before.comment(comment)
     # get update_interval
     comment = ""
     if config.has_option("Crawler", "update_interval") and int(config["Crawler"]["update_interval"].value) >= 0:
@@ -402,14 +416,18 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                     json_result = api.illust_ranking(**next_qs)
                     if json_result.illusts != None:
                         for illust in json_result.illusts:
-                            if (illust.type == "manga"):
+                            if (illust.type == "manga" and "manga" in excluding_tags_list):
                                 continue
                             if (not allow_multiple_pages and illust.page_count > 1):
                                 continue
                             # if any tag in excluding_tags_list is in illust.tags, skip
+                            excluding_tags_found = False
                             for tag in illust.tags:
-                                if ((tag.name is not None and tag.name.lower() in excluding_tags_list) or (tag.translated_name is not None and tag.translated_name.lower() in excluding_tags_list)):
-                                    continue
+                                if (excluding_tags_list and ((tag.name is not None and tag.name.lower() in excluding_tags_list) or (tag.translated_name is not None and tag.translated_name.lower() in excluding_tags_list))):
+                                    excluding_tags_found = True
+                                    break
+                            if excluding_tags_found:
+                                continue
                             urls = []
                             url = None
                             if illust.page_count == 1:
