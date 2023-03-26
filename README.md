@@ -21,4 +21,6 @@ When captcha resolving is needed, if using a CLI system, please use `python pixi
 
 If you wanted to crawl R18/R18-G images, please ensure your Pixiv account preference is allowing you to view R18/R18-G images
 
+If you don't want to crawl any manga images, please add `manga` in `excluding_tags` in config.ini under [Crawler] section
+
 If you need to migrate your db.json (TinyDB) to latest db.sqlite3 (SQLite3, which is having much better performance), please use `python migrate.py` and follow the instructions in the console to migrate your db.json to db.sqlite3 (replace `db.json` with your db file name if you are using a different name), and you may also need to change the `db_path` in config.ini to `db_path=db.sqlite3` after migration is finished
