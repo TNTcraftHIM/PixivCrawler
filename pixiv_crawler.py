@@ -143,6 +143,7 @@ def cursor_to_dict(cursor: sqlite3.Cursor):
 def get_list(string: str):
     list = []
     for x in string.split(","):
+        x = x.strip()
         if x:
             list.append(x)
     return list
