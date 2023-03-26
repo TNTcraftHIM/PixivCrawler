@@ -195,6 +195,7 @@ def login(visible=False, log_info=False):
                 logger.warning(
                     "Please reolve the captcha manually in the browser window")
                 warning_needed = False
+        time_count += 1
         time.sleep(1)
     else:
         logger.warning(
