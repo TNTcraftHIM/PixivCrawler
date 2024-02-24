@@ -32,6 +32,10 @@ def slugify(value, allow_unicode=False):
     return re.sub(r'[-\s]+', '-', value).strip('-_')
 
 
+def substring_in_list(s, substrings):
+    return any(substring in s for substring in substrings)
+
+
 def initDB(db_path: str = "db.sqlite3"):
     db = apsw.Connection(db_path)
     cursor = db.cursor()
@@ -188,10 +192,10 @@ def read_config():
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
-    config.read('config.ini')
+    config.read('config.ini', encoding='utf-8')
     if not os.path.exists('config.ini'):
         # Create config file
-        with open('config.ini', 'w'):
+        with open('config.ini', 'w', encoding='utf-8'):
             pass
     if not config.has_section("Crawler"):
         config.append("\n")
@@ -277,7 +281,7 @@ def read_config():
         if not config.has_option("Crawler", "excluding_tags"):
             comment = (
                 "tags to exclude for crawler (comma separated)")
-        excluding_tags = "manga, muscle, otokonoko, young boy, shota, furry, gay, homo, bodybuilding, macho, yaoi, futa, futanari"
+        excluding_tags = "manga, muscle, otokonoko, young boy, shota, furry, gay, homo, bodybuilding, macho, yaoi, futa, futanari, 漫画"
         logger.warning(
             "excluding_tags invalid, using default: " + str(excluding_tags))
     config.set("Crawler", "excluding_tags", excluding_tags)
@@ -343,7 +347,7 @@ def read_config():
     stop_compression_task = False
 
     # save config file
-    with open('config.ini', 'w') as configfile:
+    with open('config.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
 
     last_update_timestamp = -1
@@ -434,7 +438,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
     db_count = 0
     download_count = 0
     # convert excluding_tags to list and convert to lower case
-    excluding_tags_list = (tag.lower() for tag in get_list(excluding_tags))
+    excluding_tags_list = [tag.lower() for tag in get_list(excluding_tags)]
     # crawl images:
     try:
         for i in range(len(dates)):
@@ -458,7 +462,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                             # if any tag in excluding_tags_list is in illust.tags, skip
                             excluding_tags_found = False
                             for tag in illust.tags:
-                                if (excluding_tags_list and ((tag.name is not None and tag.name.lower() in excluding_tags_list) or (tag.translated_name is not None and tag.translated_name.lower() in excluding_tags_list))):
+                                if (excluding_tags_list and ((tag.name is not None and substring_in_list(tag.name.lower(), excluding_tags_list)) or (tag.translated_name is not None and substring_in_list(tag.translated_name.lower(), excluding_tags_list)))):
                                     excluding_tags_found = True
                                     break
                             if excluding_tags_found:

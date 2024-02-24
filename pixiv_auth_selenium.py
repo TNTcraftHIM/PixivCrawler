@@ -31,9 +31,9 @@ global_password = ""
 config = configupdater.ConfigUpdater()
 if not os.path.exists('config.ini'):
     # Create config file
-    with open('config.ini', 'w'):
+    with open('config.ini', 'w', encoding='utf-8'):
         pass
-config.read('config.ini')
+config.read('config.ini', encoding='utf-8')
 if (not config.has_section("Auth")):
     config.add_section("Auth")
 if (not config.has_option("Auth", "http_proxy")):
@@ -45,7 +45,7 @@ if (config.has_option("Auth", "pixiv_username") and config.has_option("Auth", "p
     global_password = config["Auth"]["pixiv_password"].value
 if (not config.has_option("Auth", "refresh_token")):
     config.set("Auth", "refresh_token", "")
-with open('config.ini', 'w') as configfile:
+with open('config.ini', 'w', encoding='utf-8') as configfile:
     config.write(configfile)
 
 # Latest app version can be found using GET /v1/application-info/android
@@ -281,7 +281,7 @@ def get_refresh_token(log_info=False):
     token_expired = False
 
     config = configupdater.ConfigUpdater()
-    config.read("config.ini")
+    config.read("config.ini", encoding='utf-8')
     if (not config.has_section("Auth")):
         config.append("\n")
         config.add_section("Auth")
@@ -316,13 +316,13 @@ def get_refresh_token(log_info=False):
     config.set("Auth", "refresh_token", global_refresh_token)
     config.set("Auth", "expires_in", str(global_expires_in))
     config.set("Auth", "last_update_timestamp", str(last_update_timestamp))
-    with open('config.ini', 'w') as configfile:
+    with open('config.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
     return global_refresh_token
 
 
 def get_token_expiration():
-    config.read("config.ini")
+    config.read("config.ini", encoding='utf-8')
     if (config.has_section("Auth")):
         if (config.has_option("Auth", "expires_in") and config.has_option("Auth", "last_update_timestamp")):
             return ((time.time() - float(config["Auth"]["last_update_timestamp"].value)) >= float(config["Auth"]["expires_in"].value)*3600)

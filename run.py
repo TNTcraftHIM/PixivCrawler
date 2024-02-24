@@ -16,9 +16,9 @@ def read_config():
     config = configupdater.ConfigUpdater()
     if not os.path.exists('config.ini'):
         # Create config file
-        with open('config.ini', 'w'):
+        with open('config.ini', 'w', encoding='utf-8'):
             pass
-    config.read('config.ini')
+    config.read('config.ini', encoding='utf-8')
     if not config.has_section("PixivCrawler"):
         config.append("\n")
         config.add_section("PixivCrawler")
@@ -36,7 +36,7 @@ def read_config():
     config.set("PixivCrawler", "port", port)
 
     # save config
-    with open('config.ini', 'w') as configfile:
+    with open('config.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
     logger.info("PixivCrawler config loaded")
 
