@@ -54,9 +54,9 @@ def initDB(db_path: str = "db.sqlite3"):
     );''')
 
     # Create indices for pictures table
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_author_name ON pictures(author_name);')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_r18 ON pictures(r18);')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_type ON pictures(ai_type);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS pictures_author_name_index ON pictures(author_name);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS pictures_r18_index ON pictures(r18);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS pictures_ai_type_index ON pictures(ai_type);')
 
     # Create tags table
     cursor.execute('''
