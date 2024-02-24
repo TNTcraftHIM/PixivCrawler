@@ -52,13 +52,25 @@ def initDB(db_path: str = "db.sqlite3"):
     local_filename TEXT NOT NULL DEFAULT '',
     local_filename_compressed TEXT NOT NULL DEFAULT ''
     );''')
+
+    # Create indices for pictures table
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_author_name ON pictures(author_name);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_r18 ON pictures(r18);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_type ON pictures(ai_type);')
+
     # Create tags table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS tags (
-    tag_id INTEGER PRIMARY KEY,
+    tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
     translated_name TEXT UNIQUE
     );''')
+
+    # Create tags_fts table
+    cursor.execute('''
+    CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING FTS5(name, translated_name, content="tags", content_rowid="tag_id");
+    ''')
+
     # Create picture_tags table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS picture_tags (
@@ -66,13 +78,10 @@ def initDB(db_path: str = "db.sqlite3"):
     tag_id INTEGER REFERENCES tags(tag_id) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (picture_id, tag_id)
     );''')
-    # Create index for tags table on name and translated_name
-    cursor.execute('''
-    CREATE INDEX IF NOT EXISTS tags_name_index ON tags (name);
-    ''')
-    cursor.execute('''
-    CREATE INDEX IF NOT EXISTS tags_translated_name_index ON tags (translated_name);
-    ''')
+
+    # Create indices for picture_tags table
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_picture_id ON picture_tags(picture_id);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_tag_id ON picture_tags(tag_id);')
 
     db.commit()
 

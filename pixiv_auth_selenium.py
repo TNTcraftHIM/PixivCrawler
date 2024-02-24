@@ -128,7 +128,7 @@ def get_webdriver(headless=False):
                             str(e) + "\n" + traceback.format_exc())
             exit(1)
         os.environ['WDM_SSL_VERIFY'] = '0'
-    except e:
+    except Exception as e:
         logger.critical("Aborting authentication due to error: " +
                         str(e) + "\n" + traceback.format_exc())
         exit(1)
@@ -247,7 +247,7 @@ def login(visible=False, log_info=False):
             logger.warning(
                 "SSL error, trying again with ssl verification disabled")
             REQUESTS_KWARGS["verify"] = False
-        except e:
+        except Exception as e:
             logger.critical("Aborting authentication due to error: " +
                             str(e) + "\n" + traceback.format_exc())
             exit(1)

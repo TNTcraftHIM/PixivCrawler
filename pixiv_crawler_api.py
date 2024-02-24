@@ -119,18 +119,18 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     if author_names != []:
         if len(author_names) > author_num_limit:
             author_names = (author_names)[:author_num_limit]
-        qs.append("(" + " OR ".join(["author_name LIKE '%" + name +
+        qs.append("(" + " OR ".join(["author_name LIKE '" + name +
                                      "%'" for name in author_names]) + ")")
     if title != "":
-        qs.append("title LIKE '%" + title + "%'")
+        qs.append("title LIKE '" + title + "%'")
     if ai_type != None:
         qs.append("ai_type == " + str(ai_type))
     if tags != []:
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
-        qs.append("picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT tag_id FROM tags WHERE name LIKE '%" +
-                  "%' OR name LIKE '%".join(tags) + "%' OR translated_name LIKE '%" +
-                  "%' OR translated_name LIKE '%".join(tags) + "%'))")
+        qs.append(
+            f"picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT tag_id FROM tags_fts WHERE tags_fts MATCH '{tags}'))")
+
     if local_file:
         qs.append("local_filename != ''")
     q = " AND ".join(qs)
