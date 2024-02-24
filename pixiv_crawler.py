@@ -68,7 +68,7 @@ def initDB(db_path: str = "db.sqlite3"):
 
     # Create tags_fts table and triggers
     cursor.execute('''
-    CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING FTS5(name, translated_name, content="tags", content_rowid="tag_id");
+    CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING FTS5(name, translated_name, content="tags", content_rowid="tag_id", tokenize='unicode61');
     ''')
     # Create triggers for insert, delete and update operations
     # Trigger for insert operation
@@ -100,8 +100,8 @@ def initDB(db_path: str = "db.sqlite3"):
     );''')
 
     # Create indices for picture_tags table
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_picture_id ON picture_tags(picture_id);')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_tag_id ON picture_tags(tag_id);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS picture_tags_picture_id_index ON picture_tags(picture_id);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS picture_tags_tag_id_index ON picture_tags(tag_id);')
 
     # commit by apsw
 

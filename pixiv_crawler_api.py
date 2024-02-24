@@ -128,13 +128,13 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     if tags != []:
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
+        tags = [tag + '*' for tag in tags]
         qs.append(
             "picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT ROWID FROM tags_fts WHERE tags_fts MATCH '" + " OR ".join(tags) + "'))")
 
     if local_file:
         qs.append("local_filename != ''")
     q = " AND ".join(qs)
-    print("SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures {}ORDER BY RANDOM() LIMIT {})".format("WHERE ({}) ".format(q) if q else "", num))
     results = pixiv_crawler.cursor_to_dict(cursor,
         "SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures {}ORDER BY RANDOM() LIMIT {})".format("WHERE ({}) ".format(q) if q else "", num))
     return results
