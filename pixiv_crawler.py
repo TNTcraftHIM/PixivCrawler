@@ -1,4 +1,4 @@
-import sqlite3
+import apsw
 import time
 import logging
 import traceback
@@ -33,7 +33,7 @@ def slugify(value, allow_unicode=False):
 
 
 def initDB(db_path: str = "db.sqlite3"):
-    db = sqlite3.connect(db_path, check_same_thread=False)
+    db = apsw.Connection(db_path)
     cursor = db.cursor()
 
     # Create pictures table
@@ -66,9 +66,29 @@ def initDB(db_path: str = "db.sqlite3"):
     translated_name TEXT UNIQUE
     );''')
 
-    # Create tags_fts table
+    # Create tags_fts table and triggers
     cursor.execute('''
     CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING FTS5(name, translated_name, content="tags", content_rowid="tag_id");
+    ''')
+    # Create triggers for insert, delete and update operations
+    # Trigger for insert operation
+    cursor.execute('''
+    CREATE TRIGGER IF NOT EXISTS tags_ai AFTER INSERT ON tags BEGIN
+        INSERT INTO tags_fts(rowid, name, translated_name) VALUES (new.tag_id, new.name, new.translated_name);
+    END;
+    ''')
+    # Trigger for delete operation
+    cursor.execute('''
+    CREATE TRIGGER IF NOT EXISTS tags_ad AFTER DELETE ON tags BEGIN
+        INSERT INTO tags_fts(tags_fts, rowid, name, translated_name) VALUES('delete', old.tag_id, old.name, old.translated_name);
+    END;
+    ''')
+    # Trigger for update operation
+    cursor.execute('''
+    CREATE TRIGGER IF NOT EXISTS tags_au AFTER UPDATE ON tags BEGIN
+        INSERT INTO tags_fts(tags_fts, rowid, name, translated_name) VALUES('delete', old.tag_id, old.name, old.translated_name);
+        INSERT INTO tags_fts(rowid, name, translated_name) VALUES (new.tag_id, new.name, new.translated_name);
+    END;
     ''')
 
     # Create picture_tags table
@@ -83,7 +103,7 @@ def initDB(db_path: str = "db.sqlite3"):
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_picture_id ON picture_tags(picture_id);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_tag_id ON picture_tags(tag_id);')
 
-    db.commit()
+    # commit by apsw
 
     return db
 
@@ -106,37 +126,37 @@ def insertDB(pk, data, force_update=False):
             cursor.execute("INSERT OR REPLACE INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count, r18, ai_type, url, local_filename, local_filename_compressed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT local_filename_compressed FROM pictures WHERE picture_id = ?))", ((
                 pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["r18"], data["ai_type"], data["url"], data["local_filename"], pk))
             # commit changes
-            db.commit()
+            # commit by apsw
             # insert tags
             for tag in data["tags"]:
                 # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
                 cursor.execute("INSERT OR REPLACE INTO tags (name, translated_name) VALUES (?, ?)", ((
                     tag["name"], tag["translated_name"])))
                 # commit changes
-                db.commit()
+                # commit by apsw
                 # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
                 cursor.execute(
                     "INSERT OR REPLACE INTO picture_tags (picture_id, tag_id) VALUES (?, (SELECT tag_id FROM tags WHERE name = ?))", ((pk), tag["name"]))
                 # commit changes
-                db.commit()
+                # commit by apsw
         else:
             # use the INSERT statement to insert data only if it does not exist
             cursor.execute("INSERT INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count,r18, ai_type, url, local_filename) VALUES (?, ?, ?, ?, ?, ?, ? , ? , ? , ? , ?)", ((
                 pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["r18"], data["ai_type"], data["url"], data["local_filename"]))
             # commit changes
-            db.commit()
+            # commit by apsw
             # insert tags
             for tag in data["tags"]:
                 # use the INSERT OR IGNORE statement to insert data only if it does not exist
                 cursor.execute("INSERT OR IGNORE INTO tags (name, translated_name) VALUES (?, ?)", ((
                     tag["name"], tag["translated_name"])))
                 # commit changes
-                db.commit()
+                # commit by apsw
                 # use the INSERT OR IGNORE statement to insert data only if it does not exist
                 cursor.execute(
                     "INSERT OR IGNORE INTO picture_tags (picture_id, tag_id) VALUES (?, (SELECT tag_id FROM tags WHERE name = ?))", ((pk), tag["name"]))
                 # commit changes
-                db.commit()
+                # commit by apsw
         return True
     except Exception as e:
         # logger.error("Aborting database insertion due to error: " +
@@ -144,9 +164,14 @@ def insertDB(pk, data, force_update=False):
         return False
 
 
-def cursor_to_dict(cursor: sqlite3.Cursor):
-    return [dict((cursor.description[i][0], value)
-                 for i, value in enumerate(row)) for row in cursor.fetchall()]
+def cursor_to_dict(cursor: apsw.Cursor, query: str):
+    cursor.execute(query)
+    rows = cursor.fetchone()
+    if rows:
+        columns = [desc[0] for desc in cursor.getdescription()]
+        rows = [rows] + cursor.fetchall()
+        return [dict(zip(columns, row)) for row in rows]
+    return []
 
 
 def get_list(string: str):
@@ -503,8 +528,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                     crawler_status + ", skipping image compression")
         return
     cursor = db.cursor()
-    results = cursor_to_dict(cursor.execute(
-        "SELECT * FROM pictures WHERE local_filename != ''{}".format(" AND local_filename_compressed = ''" if not force_compress else "")))
+    results = cursor_to_dict(cursor, "SELECT * FROM pictures WHERE local_filename != ''{}".format(" AND local_filename_compressed = ''" if not force_compress else ""))
     crawler_status = "compressing images"
     logger.info(
         "Image compression task started with quality {}".format(image_quality))
@@ -537,7 +561,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
                     original_filename = compressed_filename
                 cursor.execute(  # update both local_filename and local_filename_compressed
                     "UPDATE pictures SET local_filename = ?, local_filename_compressed = ? WHERE picture_id = ?", (original_filename, compressed_filename, image["picture_id"]))
-                db.commit()
+                # commit by apsw
                 count += 1
     except Exception as e:
         logger.log(logging.ERROR,
@@ -550,18 +574,16 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
 def remove_local_file(picture_id, remove_only_compressed: bool = False):
     global db
     cursor = db.cursor()
-    image = cursor.execute(
-        "SELECT * FROM pictures WHERE picture_id = ?", (picture_id,))
-    image = cursor_to_dict(image)[0]
+    image = cursor_to_dict(cursor, "SELECT * FROM pictures WHERE picture_id = ?", (picture_id,))[0]
     if image:
         remove_only_compressed = (
             image["local_filename_compressed"] != image["local_filename"]) and remove_only_compressed
-        print("Removing file '{}' and related references".format(
-            image["local_filename"]))
+        logger.log(logging.INFO, ("Removing file '{}' and related references".format(
+            image["local_filename"])))
         if not remove_only_compressed and image["local_filename"] and os.path.exists(image["local_filename"]):
             os.remove(image["local_filename"])
         if "local_filename_compressed" in image and os.path.exists(image["local_filename_compressed"]):
             os.remove(image["local_filename_compressed"])
         cursor.execute(
             "UPDATE pictures SET local_filename_compressed = ''{} WHERE picture_id = ?".format(", local_filename = ''" if not remove_only_compressed else ""), (picture_id,))
-        db.commit()
+        # commit by apsw

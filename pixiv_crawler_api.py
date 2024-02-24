@@ -129,22 +129,23 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
         qs.append(
-            f"picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT tag_id FROM tags_fts WHERE tags_fts MATCH '{tags}'))")
+            "picture_id IN (SELECT picture_id FROM picture_tags WHERE tag_id IN (SELECT ROWID FROM tags_fts WHERE tags_fts MATCH '" + " OR ".join(tags) + "'))")
 
     if local_file:
         qs.append("local_filename != ''")
     q = " AND ".join(qs)
-    results = cursor.execute(
+    print("SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures {}ORDER BY RANDOM() LIMIT {})".format("WHERE ({}) ".format(q) if q else "", num))
+    results = pixiv_crawler.cursor_to_dict(cursor,
         "SELECT * FROM pictures WHERE picture_id IN (SELECT picture_id FROM pictures {}ORDER BY RANDOM() LIMIT {})".format("WHERE ({}) ".format(q) if q else "", num))
-    return pixiv_crawler.cursor_to_dict(results)
+    return results
 
 
 def tagDB(picture_id: str):
     global db
     cursor = db.cursor()
-    results = cursor.execute(
+    results = pixiv_crawler.cursor_to_dict(cursor,
         "SELECT name, translated_name FROM tags WHERE tag_id IN (SELECT tag_id FROM picture_tags WHERE picture_id == ?)", (picture_id,))
-    return pixiv_crawler.cursor_to_dict(results)
+    return results
 
 
 def convert_date(date_text):

@@ -11,3 +11,4 @@ selenium == 4.4.3
 tinydb == 4.7.0
 uvicorn == 0.20.0
 webdriver_manager
+apsw
