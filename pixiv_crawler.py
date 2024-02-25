@@ -33,7 +33,23 @@ def slugify(value, allow_unicode=False):
 
 
 def substring_in_list(s, substrings):
-    return any(substring in s for substring in substrings)
+    for substring in substrings:
+        if substring.startswith('*') and substring.endswith('*'):
+            substring = substring.replace('*', '') # Remove '*' and perform fuzzy matching
+            if substring in s:
+                return True
+        elif substring.startswith('*'):
+            substring = substring.replace('*', '') + '$' # Replace '*' with empty and add '$' at the end to indicate the end of the string
+            if re.search(substring, s):
+                return True
+        elif substring.endswith('*'):
+            substring = '^' + substring.replace('*', '') # Replace '*' with empty and add '^' at the beginning to indicate the start of the string
+            if re.search(substring, s):
+                return True
+        else:  # If the substring does not contain '*', perform full word matching
+            if substring == s:
+                return True
+    return False
 
 
 def initDB(db_path: str = "db.sqlite3"):
@@ -162,9 +178,14 @@ def insertDB(pk, data, force_update=False):
                 # commit changes
                 # commit by apsw
         return True
+    except apsw.ConstraintError as e:
+        if force_update:
+            logger.warning(
+                "Aborting database insertion for picture_id: " + pk + " due to error: " + str(e))
+        return False
     except Exception as e:
-        # logger.error("Aborting database insertion due to error: " +
-        #       str(e) + "\n" + traceback.format_exc())
+        logger.error("Aborting database insertion for picture_id: " + pk + " due to error: " +
+              str(e) + "\n" + traceback.format_exc())
         return False
 
 
@@ -280,8 +301,8 @@ def read_config():
     else:
         if not config.has_option("Crawler", "excluding_tags"):
             comment = (
-                "tags to exclude for crawler (comma separated)")
-        excluding_tags = "manga, muscle, otokonoko, young boy, shota, furry, gay, homo, bodybuilding, macho, yaoi, futa, futanari, 漫画"
+                "tags to exclude for crawler (comma separated)， add '*' for wildcard matching, e.g. *furry* for all tags containing 'furry'")
+        excluding_tags = "manga, muscle, otokonoko, young boy, shota, furry, gay, homo, bodybuilding, macho, yaoi, futa, futanari, *漫画*"
         logger.warning(
             "excluding_tags invalid, using default: " + str(excluding_tags))
     config.set("Crawler", "excluding_tags", excluding_tags)
