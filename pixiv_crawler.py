@@ -462,16 +462,15 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
     excluding_tags_list = [tag.lower() for tag in get_list(excluding_tags)]
     # crawl images:
     try:
-        for i in range(len(dates)):
-            crawler_status = 'crawling automatically since update_interval of ' + str(update_interval) + " has been reached" if not manual else 'crawling manually {}{}'.format(
-                'and forcing updates ' if force_update else '', 'to crawl from date {} to {} [{}% completed]'.format(dates[0], dates[-1], round(i/len(dates)*100, 2)) if dates[0] != None else '')
+        for date in dates:
+            crawler_status = 'crawling automatically since update_interval of ' + str(update_interval) + " has been reached" if not manual else 'crawling manually {}{}'.format('and forcing updates ' if force_update else '', 'to crawl from date {} to {} [{}% completed]'.format(dates[0], dates[-1], round(dates.index(date)/len(dates)*100, 2)) if dates[0] != None else '')
             if get_token_expiration():
                 auth_api()
             for mode in get_list(ranking_modes):
-                if dates[i] == None:
+                if date == None:
                     next_qs = {"mode": mode}
                 else:
-                    next_qs = {"mode": mode, "date": dates[i]}
+                    next_qs = {"mode": mode, "date": date}
                 while next_qs:
                     json_result = api.illust_ranking(**next_qs)
                     if json_result.illusts != None:

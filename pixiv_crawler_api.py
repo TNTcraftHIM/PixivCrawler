@@ -285,8 +285,7 @@ def crawl(background_tasks: BackgroundTasks, api_key: str, force_update: Optiona
     crawler_status = pixiv_crawler.get_crawler_status()
     if crawler_status != "idle":
         return {"status": "error", "data": "crawler is currently " + crawler_status + ", please wait until it is done"}
-    background_tasks.add_task(
-        pixiv_crawler.crawl_images, True, force_update, dates)
+    background_tasks.add_task(pixiv_crawler.crawl_images, True, force_update, dates)
     return {"status": "success", "data": f"crawl task {'from date {} to {} '.format(dates[0], dates[-1]) if start_date != None else ''}added"}
 
 
