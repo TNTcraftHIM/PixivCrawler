@@ -209,7 +209,7 @@ def get_list(string: str):
 
 
 def read_config():
-    global api, config, db_path, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags, stop_compression_task
+    global api, config, db_path, store_mode, download_folder, download_quality, download_reverse_proxy, ranking_modes, get_all_ranking_pages, allow_multiple_pages, get_all_multiple_pages, update_interval, crawler_status, last_update_timestamp, excluding_tags, stop_compression_task, max_rate_limit_retries
     crawler_status = "reloading config"
     # read config file
     config = configupdater.ConfigUpdater()
@@ -364,6 +364,21 @@ def read_config():
     config.set("Crawler", "update_interval", str(update_interval))
     if comment != "":
         config["Crawler"]["update_interval"].add_before.comment(comment)
+    # get max_rate_limit_retries
+    comment = ""
+    if config.has_option("Crawler", "max_rate_limit_retries") and int(config["Crawler"]["max_rate_limit_retries"].value) >= 0:
+        max_rate_limit_retries = int(
+            config["Crawler"]["max_rate_limit_retries"].value)
+    else:
+        if (not config.has_option("Crawler", "max_rate_limit_retries")):
+            comment = (
+                "maximum number of retries when encountering rate limit, each retry will pause for 30 seconds")
+        max_rate_limit_retries = 5
+        logger.warning("max_rate_limit_retries invalid, using default: " +
+                       str(max_rate_limit_retries))
+    config.set("Crawler", "max_rate_limit_retries", str(max_rate_limit_retries))
+    if comment != "":
+        config["Crawler"]["max_rate_limit_retries"].add_before.comment(comment)
     # reset stop_compression_task flag (default: False)
     stop_compression_task = False
 
@@ -432,6 +447,8 @@ db = initDB(db_path)
 
 
 def crawl_images(manual=False, force_update=False, dates=[None]):
+    class RateLimitException(Exception):
+        pass
     global last_update_timestamp, update_interval, crawler_status, dismiss_skip_message
     if (not manual and update_interval == 0):
         if not dismiss_skip_message:
@@ -473,6 +490,16 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                     next_qs = {"mode": mode, "date": date}
                 while next_qs:
                     json_result = api.illust_ranking(**next_qs)
+                    rate_limit_retries_count = 0
+                    while "rate limit" in str(json_result).lower():
+                        if rate_limit_retries_count >= max_rate_limit_retries:
+                            raise RateLimitException
+                        rate_limit_retries_count += 1
+                        logger.warning(
+                            "Crawler rate limit encountered, retrying in 30 seconds (" + str(rate_limit_retries_count) + "/" + str(max_rate_limit_retries) + " retries)")
+                        # Pause for 30 seconds and try again
+                        time.sleep(30)
+                        json_result = api.illust_ranking(**next_qs)
                     if json_result.illusts != None:
                         for illust in json_result.illusts:
                             if (illust.type == "manga" and "manga" in excluding_tags_list):
@@ -537,6 +564,8 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                         break
                     next_qs = api.parse_qs(json_result.next_url)
         last_update_timestamp = time.time()
+    except RateLimitException:
+        logger.error(" Aborting crawler task due to error: rate limit retries of " + str(max_rate_limit_retries) + "/" + str(max_rate_limit_retries) + " reached")
     except Exception as e:
         logger.error("Aborting crawler task due to error: " +
                      str(e) + "\n" + traceback.format_exc())
