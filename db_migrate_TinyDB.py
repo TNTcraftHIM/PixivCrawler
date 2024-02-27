@@ -33,7 +33,7 @@ def migrateDB(db_path: str = "db.json"):
 if __name__ == "__main__":
     # transform the database from tinydb to sqlite3 according to the path given in the user input
     db_path = input(
-        "Please enter the path of the TinyDB database file (default: db.json): ")
+        "Please enter the path of the TinyDB database file (default: db.json): ") or "db.json"
     db = initDB()
 
     if db_path == "":
