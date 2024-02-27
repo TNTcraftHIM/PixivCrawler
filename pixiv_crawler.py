@@ -4,6 +4,7 @@ import logging
 import traceback
 import os
 import re
+import requests
 import unicodedata
 import configupdater
 import xxhash
@@ -67,6 +68,7 @@ def initDB(db_path: str = "db.sqlite3"):
     title TEXT NOT NULL,
     page_no INTEGER NOT NULL,
     page_count INTEGER NOT NULL,
+    orientation TINYINT NOT NULL,
     r18 TINYINT NOT NULL,
     ai_type TINYINT NOT NULL,
     url TEXT NOT NULL,
@@ -76,6 +78,7 @@ def initDB(db_path: str = "db.sqlite3"):
 
     # Create indices for pictures table
     cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_author_name ON pictures(author_name);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_orientation ON pictures(orientation);')
     cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_r18 ON pictures(r18);')
     cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_ai_type ON pictures(ai_type);')
 
@@ -146,8 +149,8 @@ def insertDB(pk, data, force_update=False):
         # check if force_update is True
         if force_update:
             # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
-            cursor.execute("INSERT OR REPLACE INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count, r18, ai_type, url, local_filename, local_filename_compressed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT local_filename_compressed FROM pictures WHERE picture_id = ?))", ((
-                pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["r18"], data["ai_type"], data["url"], data["local_filename"], pk))
+            cursor.execute("INSERT OR REPLACE INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count, orientation, r18, ai_type, url, local_filename, local_filename_compressed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT local_filename_compressed FROM pictures WHERE picture_id = ?))", ((
+                pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["orientation"], data["r18"], data["ai_type"], data["url"], data["local_filename"], pk))
             # commit changes
             # commit by apsw
             # insert tags
@@ -165,8 +168,8 @@ def insertDB(pk, data, force_update=False):
                 # commit by apsw
         else:
             # use the INSERT statement to insert data only if it does not exist
-            cursor.execute("INSERT INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count,r18, ai_type, url, local_filename) VALUES (?, ?, ?, ?, ?, ?, ? , ? , ? , ? , ?)", ((
-                pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["r18"], data["ai_type"], data["url"], data["local_filename"]))
+            cursor.execute("INSERT INTO pictures (picture_id, id, author_id, author_name, title, page_no, page_count, orientation, r18, ai_type, url, local_filename) VALUES (?, ?, ?, ?, ?, ?, ?, ? , ? , ? , ? , ?)", ((
+                pk), data["id"], data["author_id"], data["author_name"], data["title"], data["page_no"], data["page_count"], data["orientation"], data["r18"], data["ai_type"], data["url"], data["local_filename"]))
             # commit changes
             # commit by apsw
             # insert tags
@@ -430,6 +433,50 @@ def compress_image(image_path, output_path, quality):
     image.save(output_path, optimize=True, quality=quality)
 
 
+def get_image_orientation(width, height):
+    if width > height:
+        return 0 # 'Landscape'
+    elif width < height:
+        return 1 # 'Portrait'
+    else:
+        return 2 # 'Square'
+
+
+def get_image_orientation_from_source(source):
+    p = ImageFile.Parser()
+
+    # Check if the source is a URL or a local file
+    if source.startswith('http://') or source.startswith('https://'):
+        # Request image data
+        response = requests.get(source, stream=True)
+        response.raise_for_status()
+
+        # Try to read only the first 1024 bytes of data to get the image size
+        for chunk in response.iter_content(chunk_size=1024):
+            if not chunk:
+                break
+            p.feed(chunk)
+            if p.image:
+                return get_image_orientation(*p.image.size)
+
+        # If the first 1024 bytes are not enough to determine the image size,
+        # then we need to read the whole image
+        with Image.open(response.raw) as img:
+            return get_image_orientation(*img.size)
+    else:
+        with open(source, 'rb') as f:
+            # Read only the first 1024 bytes of the file
+            data = f.read(1024)
+            p.feed(data)
+
+            if p.image:
+                return get_image_orientation(*p.image.size)
+
+        # If the first 1024 bytes are not enough to determine the image size, then we need to read the whole image
+        with Image.open(source) as img:
+            return get_image_orientation(*img.size)
+
+
 def get_extension(filename):
     return os.path.splitext(filename)[1]
 
@@ -554,7 +601,7 @@ def crawl_images(manual=False, force_update=False, dates=[None]):
                                             "i.pximg.net", download_reverse_proxy)
                                     local_filename = download_folder + os.sep + local_filename
                                 data = {"id": illust.id, "author_id": illust.user.id, "author_name": illust.user.name, "title": illust.title, "page_no": i,
-                                        "page_count": illust.page_count, "r18": illust.x_restrict, "ai_type": illust.illust_ai_type, "tags": illust.tags, "url": url, "local_filename": local_filename}
+                                        "page_count": illust.page_count, "orientation": get_image_orientation(illust.width, illust.height), "r18": illust.x_restrict, "ai_type": illust.illust_ai_type, "tags": illust.tags, "url": url, "local_filename": local_filename}
                                 image_count += 1
                                 # insert into database
                                 if (insertDB(pk, data, force_update)):

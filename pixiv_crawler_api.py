@@ -95,7 +95,7 @@ def read_config():
         logger.warning("Empty database, please crawl images using /api/v1/crawl function with your privilege API key: " + privilege_api_key + " (e.g. /api/v1/crawl?api_key=" + privilege_api_key + ")")
 
 
-def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] = [], author_names: List[str] = [], title: str = "", ai_type: int = None, tags: List[str] = [], local_file: bool = False):
+def randomDB(r18: int = 2, orientation: int = 3, num: int = 1, id: int = None, author_ids: List[int] = [], author_names: List[str] = [], title: str = "", ai_type: int = None, tags: List[str] = [], local_file: bool = False):
     global db
     cursor = db.cursor()
     if pixiv_crawler.lenDB() == 0:
@@ -105,6 +105,10 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
         r18 = 2
     if r18 in [0, 1]:
         qs.append("r18 == " + str(r18))
+    if orientation not in [0, 1, 2, 3]:
+        orientation = 3
+    if orientation in [0, 1, 2]:
+        qs.append("orientation == " + str(orientation))
     if num < 1:
         num = 1
     if num > image_num_limit:
@@ -193,9 +197,9 @@ def read_info():
 
 
 @app.get("/api/v1", description="Get image JSON according to query")
-def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), num: Optional[int] = QueryParam(default=1, description="Specify number of illustrations"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
+def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), orientation: Optional[int] = QueryParam(default=3, description="Specify images' orientation (0 = Landscape, 1 = Portrait, 2 = Square, 3 = Any)"), num: Optional[int] = QueryParam(default=1, description="Specify number of illustrations"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
-    results = randomDB(r18=r18, num=num, id=id, author_ids=author_ids,
+    results = randomDB(r18=r18, orientation=orientation, num=num, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
         return {"status": "error", "data": "no result"}
@@ -211,11 +215,11 @@ def get_image_json(background_tasks: BackgroundTasks, r18: Optional[int] = Query
 
 @app.get("/api/v1/img", description="Get image file from local storage according to query (need store_mode to be \"full\" and have files downloaded in local storage)")
 # directly return image file
-def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
+def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), orientation: Optional[int] = QueryParam(default=3, description="Specify images' orientation (0 = Landscape, 1 = Portrait, 2 = Square, 3 = Any)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
     filename = ""
     for _ in range(pixiv_crawler.lenDB()):
-        results = randomDB(r18=r18, id=id, author_ids=author_ids,
+        results = randomDB(r18=r18, orientation=orientation, id=id, author_ids=author_ids,
                            author_names=author_names, title=title, ai_type=ai_type, tags=tags, local_file=True)
         if not results:
             return {"status": "error", "data": "no result"}
@@ -236,9 +240,9 @@ def get_image_file(background_tasks: BackgroundTasks, r18: Optional[int] = Query
 
 
 @app.get("/api/v1/html", description="Get image in a HTML page according to query")
-def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
+def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), orientation: Optional[int] = QueryParam(default=3, description="Specify images' orientation (0 = Landscape, 1 = Portrait, 2 = Square, 3 = Any)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
-    results = randomDB(r18=r18, id=id, author_ids=author_ids,
+    results = randomDB(r18=r18, orientation=orientation, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
         return {"status": "error", "data": "no result"}
@@ -250,9 +254,9 @@ def get_image_html(background_tasks: BackgroundTasks, r18: Optional[int] = Query
 
 
 @app.get("/api/v1/redirect", description="Get image and redirect to its URL according to query")
-def get_image_redirect(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
+def get_image_redirect(background_tasks: BackgroundTasks, r18: Optional[int] = QueryParam(default=2, description="Whether to include R18 images (0 = No R18 images, 1 = Only R18 image, 2 = Both)"), orientation: Optional[int] = QueryParam(default=3, description="Specify images' orientation (0 = Landscape, 1 = Portrait, 2 = Square, 3 = Any)"), id: Optional[int] = QueryParam(default=None, description="Specify illustrations' ID"), author_ids: Optional[List[int]] = QueryParam(default=[], description="Specify list of authors' (ID) illustrations"), author_names: Optional[List[str]] = QueryParam(default=[], description="Specify list of authors' (name) illustrations"), title: Optional[str] = QueryParam(default="", description="Specify keywords in illustrations' title"), ai_type: Optional[int] = QueryParam(default=None, description="Specify illustrations' ai_type"), tags: Optional[List[str]] = QueryParam(default=[], description="Specify list of tags in illustrations")):
     background_tasks.add_task(pixiv_crawler.crawl_images)
-    results = randomDB(r18=r18, id=id, author_ids=author_ids,
+    results = randomDB(r18=r18, orientation=orientation, id=id, author_ids=author_ids,
                        author_names=author_names, title=title, ai_type=ai_type, tags=tags)
     if not results:
         return {"status": "error", "data": "no result"}
