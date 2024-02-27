@@ -12,3 +12,4 @@ tinydb == 4.7.0
 uvicorn == 0.20.0
 webdriver_manager
 apsw
+xxhash

@@ -144,7 +144,7 @@ def tagDB(picture_id: str):
     global db
     cursor = db.cursor()
     results = pixiv_crawler.cursor_to_dict(cursor,
-        "SELECT name, translated_name FROM tags WHERE tag_id IN (SELECT tag_id FROM picture_tags WHERE picture_id == '" + picture_id + "')")
+        "SELECT name, translated_name FROM tags WHERE tag_id IN (SELECT tag_id FROM picture_tags WHERE picture_id == " + picture_id + ")")
     return results
 
 

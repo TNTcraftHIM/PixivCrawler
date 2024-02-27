@@ -6,6 +6,7 @@ import os
 import re
 import unicodedata
 import configupdater
+import xxhash
 
 from PIL import Image, ImageFile, UnidentifiedImageError
 from pixivpy3 import *
@@ -59,29 +60,29 @@ def initDB(db_path: str = "db.sqlite3"):
     # Create pictures table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS pictures (
-    picture_id TEXT PRIMARY KEY,
+    picture_id INTEGER PRIMARY KEY,
     id INTEGER NOT NULL,
     author_id INTEGER NOT NULL,
     author_name TEXT NOT NULL,
     title TEXT NOT NULL,
     page_no INTEGER NOT NULL,
     page_count INTEGER NOT NULL,
-    r18 INTEGER NOT NULL,
-    ai_type INTEGER NOT NULL,
+    r18 TINYINT NOT NULL,
+    ai_type TINYINT NOT NULL,
     url TEXT NOT NULL,
     local_filename TEXT NOT NULL DEFAULT '',
     local_filename_compressed TEXT NOT NULL DEFAULT ''
     );''')
 
     # Create indices for pictures table
-    cursor.execute('CREATE INDEX IF NOT EXISTS pictures_author_name_index ON pictures(author_name);')
-    cursor.execute('CREATE INDEX IF NOT EXISTS pictures_r18_index ON pictures(r18);')
-    cursor.execute('CREATE INDEX IF NOT EXISTS pictures_ai_type_index ON pictures(ai_type);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_author_name ON pictures(author_name);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_r18 ON pictures(r18);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS index_pictures_ai_type ON pictures(ai_type);')
 
     # Create tags table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS tags (
-    tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     translated_name TEXT UNIQUE
     );''')
@@ -114,14 +115,14 @@ def initDB(db_path: str = "db.sqlite3"):
     # Create picture_tags table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS picture_tags (
-    picture_id TEXT REFERENCES pictures(picture_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    picture_id INTEGER REFERENCES pictures(picture_id) ON DELETE CASCADE ON UPDATE CASCADE,
     tag_id INTEGER REFERENCES tags(tag_id) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (picture_id, tag_id)
     );''')
 
     # Create indices for picture_tags table
-    cursor.execute('CREATE INDEX IF NOT EXISTS picture_tags_picture_id_index ON picture_tags(picture_id);')
-    cursor.execute('CREATE INDEX IF NOT EXISTS picture_tags_tag_id_index ON picture_tags(tag_id);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS index_picture_tags_picture_id ON picture_tags(picture_id);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS index_picture_tags_tag_id ON picture_tags(tag_id);')
 
     # commit by apsw
 
@@ -137,6 +138,8 @@ def lenDB():
 
 def insertDB(pk, data, force_update=False):
     global db
+    # convert pk into xxhash integer
+    pk = xxhash.xxh32_intdigest(pk)
     try:
         # create a cursor object
         cursor = db.cursor()
@@ -149,9 +152,10 @@ def insertDB(pk, data, force_update=False):
             # commit by apsw
             # insert tags
             for tag in data["tags"]:
+                # calculate tag_id by hashing tag name
+                tag_id = xxhash.xxh32_intdigest(str(tag["name"]))
                 # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
-                cursor.execute("INSERT OR REPLACE INTO tags (name, translated_name) VALUES (?, ?)", ((
-                    tag["name"], tag["translated_name"])))
+                cursor.execute("INSERT OR REPLACE INTO tags (tag_id, name, translated_name) VALUES (?, ?, ?)", ((tag_id, tag["name"], tag["translated_name"])))
                 # commit changes
                 # commit by apsw
                 # use the INSERT OR REPLACE statement to proform 'UPSERT' operation
@@ -167,9 +171,10 @@ def insertDB(pk, data, force_update=False):
             # commit by apsw
             # insert tags
             for tag in data["tags"]:
+                # calculate tag_id by hashing tag name
+                tag_id = xxhash.xxh32_intdigest(str(tag["name"]))
                 # use the INSERT OR IGNORE statement to insert data only if it does not exist
-                cursor.execute("INSERT OR IGNORE INTO tags (name, translated_name) VALUES (?, ?)", ((
-                    tag["name"], tag["translated_name"])))
+                cursor.execute("INSERT OR IGNORE INTO tags (tag_id, name, translated_name) VALUES (?, ?, ?)", ((tag_id, tag["name"], tag["translated_name"])))
                 # commit changes
                 # commit by apsw
                 # use the INSERT OR IGNORE statement to insert data only if it does not exist
@@ -181,10 +186,10 @@ def insertDB(pk, data, force_update=False):
     except apsw.ConstraintError as e:
         if force_update:
             logger.warning(
-                "Aborting database insertion for picture_id: " + pk + " due to error: " + str(e))
+                "Aborting database insertion for picture_id: " + str(pk) + " due to error: " + str(e))
         return False
     except Exception as e:
-        logger.error("Aborting database insertion for picture_id: " + pk + " due to error: " +
+        logger.error("Aborting database insertion for picture_id: " + str(pk) + " due to error: " +
               str(e) + "\n" + traceback.format_exc())
         return False
 
