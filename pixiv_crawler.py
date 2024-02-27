@@ -631,6 +631,7 @@ def compress_images(image_quality: int = 75, force_compress: bool = False, delet
 
 def remove_local_file(picture_id, remove_only_compressed: bool = False):
     global db
+    picture_id = str(picture_id)
     cursor = db.cursor()
     image = cursor_to_dict(cursor, "SELECT * FROM pictures WHERE picture_id = " + picture_id)[0]
     if image:

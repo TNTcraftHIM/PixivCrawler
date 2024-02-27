@@ -140,11 +140,11 @@ def randomDB(r18: int = 2, num: int = 1, id: int = None, author_ids: List[int] =
     return results
 
 
-def tagDB(picture_id: str):
+def tagDB(picture_id):
     global db
     cursor = db.cursor()
     results = pixiv_crawler.cursor_to_dict(cursor,
-        "SELECT name, translated_name FROM tags WHERE tag_id IN (SELECT tag_id FROM picture_tags WHERE picture_id == " + picture_id + ")")
+        "SELECT name, translated_name FROM tags WHERE tag_id IN (SELECT tag_id FROM picture_tags WHERE picture_id == " + str(picture_id) + ")")
     return results
 
 
