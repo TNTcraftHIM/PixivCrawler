@@ -113,23 +113,23 @@ def randomDB(r18: int = 2, orientation: int = 3, num: int = 1, id: int = None, a
         num = 1
     if num > image_num_limit:
         num = image_num_limit
-    if id != None:
+    if id:
         qs.append("id == " + str(id))
-    if author_ids != []:
+    if author_ids:
         if len(author_ids) > author_num_limit:
             author_ids = (author_ids)[:author_num_limit]
         qs.append("author_id IN " +
                   str(author_ids).replace("[", "(").replace("]", ")"))
-    if author_names != []:
+    if author_names and author_names != [""]:
         if len(author_names) > author_num_limit:
             author_names = (author_names)[:author_num_limit]
         qs.append("(" + " OR ".join(["author_name LIKE '" + name +
                                      "%'" for name in author_names]) + ")")
-    if title != "":
+    if title:
         qs.append("title LIKE '" + title + "%'")
-    if ai_type != None:
+    if ai_type:
         qs.append("ai_type == " + str(ai_type))
-    if tags != []:
+    if tags and tags != [""]:
         if len(tags) > tag_num_limit:
             tags = (tags)[:tag_num_limit]
         tags = [tag + '*' for tag in tags]

@@ -15,6 +15,8 @@ If you are using this crawler for the first time, you might need to crawl images
 You could find the API documents and try all the functionalities out at `http://localhost:8000/docs` (replace `localhost` with your server's IP address if you are running the script on a remote server, also replace `8000` with the port you specified in config.ini)
 
 # Notes
+If you wish to use multiple tags in the request query, please add the parameters in the following format: `tags=tag1&tags=tag2&tags=tag3` in the request query (replace `tag1`, `tag2`, `tag3` with the tags you want to search for)
+
 If you encounter any network related errors, please try to set `http_proxy` in config.ini under [Auth] section to your proxy server's address (e.g. `http_proxy=http://127.0.0.1:7890`)
 
 When captcha resolving is needed, if using a CLI system, please use `python pixiv_auth_selenium.py login` in a system with GUI and record and paste `referesh_token` in config.ini under [Auth] section as `refresh_token=YourRefreshToken`, and run the crawler again
