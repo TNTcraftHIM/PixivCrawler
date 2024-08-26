@@ -7,7 +7,7 @@ fastapi
 loguru >= 0.6.0
 numpy == 1.23.5
 requests
-selenium
+selenium==4.9.1
 tinydb == 4.7.0
 uvicorn
 webdriver_manager
